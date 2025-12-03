@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { clsx } from 'clsx';
 import { Star, ArrowRight, ArrowDown, ArrowLeft, ArrowUp } from 'lucide-react';
 import { PlayerState, PlayerColor } from '../../types';
@@ -10,15 +10,37 @@ interface LudoBoardProps {
   currentTurn?: PlayerColor;
   onPawnClick?: (playerId: string, pawnId: string) => void;
   validMovePawns?: string[]; // List of pawn IDs that can currently move
+  onUnlockSecret?: () => void;
 }
 
 export const LudoBoard: React.FC<LudoBoardProps> = ({ 
   players = [], 
   currentTurn, 
   onPawnClick,
-  validMovePawns = []
+  validMovePawns = [],
+  onUnlockSecret
 }) => {
   
+  // Secret DIY Unlock Logic
+  const secretClickCount = useRef(0);
+  const secretClickTimeout = useRef<any>(null);
+
+  const handleSecretClick = () => {
+    secretClickCount.current += 1;
+    
+    if (secretClickTimeout.current) clearTimeout(secretClickTimeout.current);
+    
+    // Reset count if user stops clicking for 1 second
+    secretClickTimeout.current = setTimeout(() => {
+        secretClickCount.current = 0;
+    }, 1000);
+
+    if (secretClickCount.current >= 7) {
+        if (onUnlockSecret) onUnlockSecret();
+        secretClickCount.current = 0;
+    }
+  };
+
   // Render Pawns logic for Paths (Board Cells)
   const pawnsByCell: Record<string, { pawn: any, player: PlayerState }[]> = {};
 
@@ -184,7 +206,11 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({
         if (data.type === 'CENTER') {
            if (x === 6 && y === 6) {
              cells.push(
-               <div key={key} className="col-span-3 row-span-3 bg-ludo-dark relative overflow-hidden border-[6px] border-ludo-dark">
+               <div 
+                  key={key} 
+                  onClick={handleSecretClick}
+                  className="col-span-3 row-span-3 bg-ludo-dark relative overflow-hidden border-[6px] border-ludo-dark active:scale-[0.98] transition-transform"
+               >
                   <div className="absolute top-0 left-0 w-full h-full bg-ludo-red" style={{ clipPath: 'polygon(0 0, 0 100%, 50% 50%)' }}></div>
                   <div className="absolute top-0 left-0 w-full h-full bg-ludo-green" style={{ clipPath: 'polygon(0 0, 100% 0, 50% 50%)' }}></div>
                   <div className="absolute top-0 left-0 w-full h-full bg-ludo-yellow" style={{ clipPath: 'polygon(100% 0, 100% 100%, 50% 50%)' }}></div>

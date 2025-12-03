@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { LudoBoard } from './LudoBoard';
 import { Dice } from './Dice';
+import { DIYControl } from './DIYControl';
 import { SharpButton } from '../ui/SharpButton';
 import { PlayerState, PlayerColor } from '../../types';
 import { isValidMove, SAFE_INDICES, PLAYER_START_OFFSETS } from './gameUtils';
-import { X, Trophy } from 'lucide-react';
+import { X, Trophy, Wand2 } from 'lucide-react';
 
 interface GameScreenProps {
   onExit: () => void;
@@ -49,6 +50,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
   const [turnTimerKey, setTurnTimerKey] = useState(0);
   const [isMovingPawn, setIsMovingPawn] = useState(false);
 
+  // --- Secret DIY State ---
+  const [diyUnlocked, setDiyUnlocked] = useState(false);
+  const [diyActive, setDiyActive] = useState(false);
+  const [showDiyPopup, setShowDiyPopup] = useState(false);
+  const diySelectedRef = useRef<number | null>(null);
+
   const currentPlayer = players[turnIndex];
 
   // --- Core Game Logic ---
@@ -68,9 +75,26 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
     if (isRolling || hasRolled || winner || isMovingPawn) return;
 
     setIsRolling(true);
+
+    // DIY Interception: Wait longer and show popup if active
+    if (diyActive) {
+      setShowDiyPopup(true);
+      diySelectedRef.current = null;
+    }
+
+    const rollDuration = diyActive ? 1200 : 600; // 1.2s for DIY selection, 600ms for normal
     
     setTimeout(() => {
-      const rolledValue = Math.floor(Math.random() * 6) + 1;
+      let rolledValue = Math.floor(Math.random() * 6) + 1;
+
+      // Force value if DIY was active and selected
+      if (diyActive) {
+        setShowDiyPopup(false);
+        if (diySelectedRef.current !== null) {
+          rolledValue = diySelectedRef.current;
+        }
+      }
+
       setDiceValue(rolledValue);
       setIsRolling(false);
       setHasRolled(true);
@@ -87,8 +111,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
       if (moves.length === 0) {
         setTimeout(nextTurn, 1000);
       }
-    }, 600);
-  }, [currentPlayer, isRolling, hasRolled, winner, isMovingPawn, nextTurn]);
+    }, rollDuration);
+  }, [currentPlayer, isRolling, hasRolled, winner, isMovingPawn, nextTurn, diyActive]);
+
+  const handleDiySelect = (value: number) => {
+    diySelectedRef.current = value;
+    // We don't close the popup immediately, we wait for the roll timer to finish visually
+    // giving feedback that selection is made could be good, but prompt implies simple 1s window.
+    // For now, the ref handles it.
+  };
 
   const handlePawnClick = (playerId: string, pawnId: string) => {
     if (!hasRolled || playerId !== currentPlayer.id || !validMovePawns.includes(pawnId) || isMovingPawn) return;
@@ -201,7 +232,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
        }
     }, TURN_DURATION);
     return () => clearTimeout(timer);
-  }, [turnTimerKey, hasRolled, isRolling, validMovePawns, handleRoll, animateMoveSequence, nextTurn, winner, isMovingPawn]);
+  }, [turnTimerKey, hasRolled, isRolling, validMovePawns, handleRoll, animateMoveSequence, nextTurn, winner, isMovingPawn, diyActive]);
 
   // Bot Turn
   useEffect(() => {
@@ -223,7 +254,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
         return () => clearTimeout(moveDelay);
       }
     }
-  }, [currentPlayer, isRolling, hasRolled, validMovePawns, handleRoll, animateMoveSequence, winner, isMovingPawn]);
+  }, [currentPlayer, isRolling, hasRolled, validMovePawns, handleRoll, animateMoveSequence, winner, isMovingPawn, diyActive]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ludo-dark overflow-hidden">
@@ -233,9 +264,26 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
           <div className="flex items-center gap-2">
              <div className="font-black text-xl tracking-tighter text-white">HOMIIES<span className="text-ludo-red">.</span></div>
           </div>
-          <SharpButton variant="secondary" className="px-3 py-1 text-xs h-8" onClick={onExit} icon={<X size={14} />}>
-            LEAVE
-          </SharpButton>
+          
+          <div className="flex items-center gap-4">
+            {/* DIY Toggle Button (Hidden unless unlocked) */}
+            {diyUnlocked && (
+              <button 
+                onClick={() => setDiyActive(!diyActive)}
+                className={clsx(
+                  "p-2 rounded-md border-2 transition-all flex items-center gap-2 font-mono text-xs font-bold",
+                  diyActive ? "bg-ludo-red text-white border-ludo-red animate-pulse" : "bg-transparent text-white/30 border-white/10 hover:border-white/50"
+                )}
+              >
+                <Wand2 size={16} />
+                <span>DIY: {diyActive ? 'ON' : 'OFF'}</span>
+              </button>
+            )}
+
+            <SharpButton variant="secondary" className="px-3 py-1 text-xs h-8" onClick={onExit} icon={<X size={14} />}>
+              LEAVE
+            </SharpButton>
+          </div>
        </div>
 
        {/* Main Game Area */}
@@ -254,6 +302,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
                   <SharpButton onClick={onExit} className="mt-8">Back to Lobby</SharpButton>
                </motion.div>
             )}
+          </AnimatePresence>
+
+          {/* DIY Control Overlay */}
+          <AnimatePresence>
+             {showDiyPopup && <DIYControl onSelect={handleDiySelect} />}
           </AnimatePresence>
 
           {/* MOBILE: Top Row Players (Red & Green) */}
@@ -312,6 +365,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
                   currentTurn={currentPlayer.color}
                   onPawnClick={handlePawnClick}
                   validMovePawns={validMovePawns}
+                  onUnlockSecret={() => setDiyUnlocked(true)}
                />
              </div>
           </div>
