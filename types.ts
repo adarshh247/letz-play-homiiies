@@ -33,4 +33,5 @@ export interface PlayerState {
   avatarUrl: string;
   isBot: boolean;
   pawns: Pawn[];
+  rank?: number; // 1 = 1st, 2 = 2nd, 3 = 3rd, 4 = Loser
 }

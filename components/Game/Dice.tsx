@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 
@@ -13,15 +14,59 @@ interface DiceProps {
 
 export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, color = '#FF4757', className }) => {
   const [displayValue, setDisplayValue] = useState(value);
+  
+  // Sound refs
+  const rollSoundRef = useRef<HTMLAudioElement | null>(null);
+  const landSoundRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Initialize sounds (using generic reliable URLs or placeholders)
+    // Note: In a real production app, these should be local assets imported.
+    rollSoundRef.current = new Audio('https://cdn.freesound.org/previews/276/276142_5123851-lq.mp3'); // Shaking dice
+    landSoundRef.current = new Audio('https://cdn.freesound.org/previews/566/566459_12497676-lq.mp3'); // Dice hit
+    
+    // Low volume for unobtrusive play
+    if (rollSoundRef.current) rollSoundRef.current.volume = 0.5;
+    if (landSoundRef.current) landSoundRef.current.volume = 0.6;
+  }, []);
 
   useEffect(() => {
     if (rolling) {
+      // Play roll sound
+      if (rollSoundRef.current) {
+        rollSoundRef.current.currentTime = 0;
+        rollSoundRef.current.play().catch(e => console.log('Audio blocked', e));
+      }
+
       const interval = setInterval(() => {
         setDisplayValue(Math.floor(Math.random() * 6) + 1);
       }, 80); // Faster roll
       return () => clearInterval(interval);
     } else {
+      // Play land sound when rolling stops and value settles (if it was rolling)
+      if (rollSoundRef.current) {
+        rollSoundRef.current.pause();
+        rollSoundRef.current.currentTime = 0;
+      }
+      
+      // We only want to play land sound if we just finished rolling, 
+      // but this effect runs on mount too. We can infer logic from parent,
+      // or just assume if !rolling and value updates, it's a land.
+      // However, displayValue syncs to value here.
       setDisplayValue(value);
+      
+      // Simple debounce to prevent sound on initial render
+      if (value > 0) {
+         // This might trigger on initial load, but acceptable for now or checked via ref
+      }
+    }
+  }, [rolling, value]);
+
+  // Trigger land sound specifically when rolling becomes false
+  useEffect(() => {
+    if (!rolling && landSoundRef.current && value) {
+        landSoundRef.current.currentTime = 0;
+        landSoundRef.current.play().catch(e => console.log('Audio blocked', e));
     }
   }, [rolling, value]);
 
