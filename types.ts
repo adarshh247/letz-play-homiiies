@@ -1,5 +1,6 @@
 
 export enum ViewState {
+  AUTH = 'AUTH',
   LOBBY = 'LOBBY',
   MODE_SELECT = 'MODE_SELECT',
   FRIEND_OPTIONS = 'FRIEND_OPTIONS',
@@ -7,6 +8,15 @@ export enum ViewState {
   JOIN_ROOM = 'JOIN_ROOM',
   PLAYING_COMPUTER = 'PLAYING_COMPUTER',
   GAME = 'GAME',
+  WALLET = 'WALLET',
+}
+
+export interface UserStats {
+  gamesWon: number;
+  gamesLost: number;
+  winStreak: number;
+  tokensCaptured: number;
+  tournamentsWon: number;
 }
 
 export interface User {
@@ -14,6 +24,8 @@ export interface User {
   name: string;
   avatarUrl: string;
   coins: number;
+  level: number;
+  stats: UserStats;
 }
 
 export const COIN_REWARDS = [50, 100, 200, 500, 1000, 0];
