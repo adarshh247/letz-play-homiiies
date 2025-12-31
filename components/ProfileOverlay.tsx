@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trophy, Swords, Zap, Crosshair, Target, Edit3, LogOut, ChevronRight } from 'lucide-react';
+import { X, Trophy, Edit3, LogOut, Check, User as UserIcon } from 'lucide-react';
 import { User } from '../types';
 import { SharpButton } from './ui/SharpButton';
 
@@ -10,17 +10,35 @@ interface ProfileOverlayProps {
   user: User;
   onClose: () => void;
   onLogout: () => void;
-  onEditProfile: () => void;
+  onUpdateUser: (updates: Partial<User>) => void;
 }
 
-export const ProfileOverlay: React.FC<ProfileOverlayProps> = ({ isOpen, user, onClose, onLogout, onEditProfile }) => {
+const AVATAR_SEEDS = ['Felix', 'Aneka', 'John', 'Sarah', 'CoolHomiie', 'Spike', 'Milo', 'Luna'];
+
+export const ProfileOverlay: React.FC<ProfileOverlayProps> = ({ isOpen, user, onClose, onLogout, onUpdateUser }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState(user.name);
+  const [selectedAvatar, setSelectedAvatar] = useState(user.avatarUrl);
+
+  useEffect(() => {
+    if (isOpen) {
+      setEditedName(user.name);
+      setSelectedAvatar(user.avatarUrl);
+      setIsEditing(false);
+    }
+  }, [isOpen, user]);
+
   const stats = [
-    { label: 'Games Won', value: user.stats.gamesWon, icon: <Trophy className="text-ludo-yellow" size={20} />, color: 'bg-ludo-yellow/10' },
-    { label: 'Games Lost', value: user.stats.gamesLost, icon: <Swords className="text-ludo-red" size={20} />, color: 'bg-ludo-red/10' },
-    { label: 'Win Streak', value: user.stats.winStreak, icon: <Zap className="text-ludo-green" size={20} />, color: 'bg-ludo-green/10' },
-    { label: 'Tokens Captured', value: user.stats.tokensCaptured, icon: <Crosshair className="text-ludo-blue" size={20} />, color: 'bg-ludo-blue/10' },
-    { label: 'Tournaments', value: user.stats.tournamentsWon, icon: <Target className="text-white" size={20} />, color: 'bg-white/10' },
+    { label: 'Wins', value: user.stats.gamesWon, color: 'text-ludo-yellow' },
+    { label: 'Losses', value: user.stats.gamesLost, color: 'text-ludo-red' },
+    { label: 'Streak', value: user.stats.winStreak, color: 'text-ludo-green' },
+    { label: 'Captured', value: user.stats.tokensCaptured, color: 'text-ludo-blue' },
   ];
+
+  const handleSave = () => {
+    onUpdateUser({ name: editedName, avatarUrl: selectedAvatar });
+    setIsEditing(false);
+  };
 
   return (
     <AnimatePresence>
@@ -29,95 +47,125 @@ export const ProfileOverlay: React.FC<ProfileOverlayProps> = ({ isOpen, user, on
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-ludo-dark/80 backdrop-blur-xl"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-ludo-dark/95 backdrop-blur-md overflow-y-auto"
         >
           <motion.div 
-            initial={{ scale: 0.9, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0.9, y: 20 }}
-            className="bg-ludo-dark border-2 border-white/10 w-full max-w-lg relative overflow-hidden shadow-2xl rounded-3xl"
+            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+            className="bg-ludo-dark border border-white/10 w-full max-w-sm relative rounded-none shadow-2xl my-auto flex-shrink-0"
           >
-            {/* Header / Background Glow */}
-            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-white/5 to-transparent -z-10" />
-
             <button 
               onClick={onClose}
-              className="absolute top-6 right-6 p-2 text-white/30 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all"
+              className="absolute top-3 right-3 p-2 text-white/30 hover:text-white transition-all z-10"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
 
-            <div className="p-8 pt-12">
-              {/* User Identity */}
-              <div className="flex flex-col items-center mb-10">
-                <div className="relative mb-4">
-                  <div className="w-28 h-28 rounded-full border-4 border-ludo-yellow p-1 shadow-[0_0_30px_rgba(255,165,2,0.2)]">
-                    <img src={user.avatarUrl} className="w-full h-full rounded-full object-cover bg-white/10" alt={user.name} />
-                  </div>
-                  <div className="absolute -bottom-2 right-0 bg-white text-ludo-dark px-3 py-1 rounded-full font-black text-sm border-2 border-ludo-dark shadow-lg">
-                    LVL {user.level}
-                  </div>
-                </div>
-                <h2 className="text-3xl font-black text-white uppercase tracking-tighter">{user.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-white/40 text-xs font-mono uppercase tracking-widest">Homiie ID: #872-9X</span>
-                </div>
-              </div>
-
-              {/* Stats Grid */}
-              <div className="grid grid-cols-2 gap-3 mb-10">
-                {stats.map((stat, idx) => (
-                  <div key={idx} className={`${stat.color} p-4 border border-white/5 rounded-2xl flex flex-col gap-2 group hover:border-white/20 transition-all`}>
-                    <div className="flex items-center gap-3">
-                      {stat.icon}
-                      <span className="text-[10px] text-white/40 font-black uppercase tracking-wider">{stat.label}</span>
+            <div className="p-6 md:p-8">
+              <AnimatePresence mode="wait">
+                {isEditing ? (
+                  <motion.div 
+                    key="editing"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    <div className="text-center">
+                      <h3 className="text-sm font-black text-white uppercase tracking-widest mb-4 italic">Re-Initialize Identity</h3>
                     </div>
-                    <div className="text-2xl font-black text-white font-mono group-hover:scale-105 transition-transform origin-left">
-                      {stat.value.toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-                
-                {/* Ranking / Progress Card */}
-                <div className="bg-white/5 p-4 border border-white/5 rounded-2xl flex flex-col justify-between">
-                  <span className="text-[10px] text-white/40 font-black uppercase tracking-wider">Next Level</span>
-                  <div className="mt-2">
-                    <div className="flex justify-between text-[10px] font-bold mb-1">
-                      <span className="text-ludo-yellow">85%</span>
-                      <span className="text-white/30">1200 / 1500 XP</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                      <div className="h-full bg-ludo-yellow w-[85%]" />
-                    </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Actions */}
-              <div className="flex flex-col gap-3">
-                <SharpButton 
-                  onClick={onEditProfile}
-                  variant="outline" 
-                  className="w-full h-14 rounded-2xl normal-case text-base gap-4"
-                >
-                  <Edit3 size={18} />
-                  Edit Profile
-                  <ChevronRight size={16} className="ml-auto opacity-30" />
-                </SharpButton>
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black text-white/30 uppercase tracking-[0.3em]">Neural Handle</label>
+                      <input 
+                        type="text"
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 p-3 text-white font-black text-sm outline-none focus:border-ludo-yellow"
+                        placeholder="Enter Name..."
+                      />
+                    </div>
 
-                <SharpButton 
-                  onClick={onLogout}
-                  variant="ghost" 
-                  className="w-full h-14 rounded-2xl normal-case text-base text-ludo-red hover:bg-ludo-red/10 border-transparent gap-4"
-                >
-                  <LogOut size={18} />
-                  Logout Account
-                </SharpButton>
-              </div>
-            </div>
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black text-white/30 uppercase tracking-[0.3em]">Avatar Cluster</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {AVATAR_SEEDS.map((seed) => {
+                          const url = `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+                          const isSelected = selectedAvatar === url;
+                          return (
+                            <button 
+                              key={seed}
+                              onClick={() => setSelectedAvatar(url)}
+                              className={`aspect-square border transition-all p-1 ${isSelected ? 'border-ludo-yellow bg-ludo-yellow/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
+                            >
+                              <img src={url} alt={seed} className="w-full h-full" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-            <div className="p-6 bg-white/5 text-center text-[10px] font-mono text-white/20 uppercase tracking-[0.4em]">
-              Established 2025 • Homiies Network
+                    <div className="flex gap-2 pt-2">
+                      <SharpButton onClick={handleSave} variant="primary" className="flex-1 h-10 text-xs">Confirm</SharpButton>
+                      <SharpButton onClick={() => setIsEditing(false)} variant="ghost" className="flex-1 h-10 text-xs">Cancel</SharpButton>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="display"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                  >
+                    {/* Identity Section */}
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-14 h-14 border border-white/10 p-1 flex-shrink-0 relative">
+                        <img src={user.avatarUrl} className="w-full h-full object-cover bg-white/5" alt={user.name} />
+                      </div>
+                      <div>
+                        <h2 className="text-lg md:text-xl font-black text-white uppercase tracking-tighter italic leading-none">{user.name}</h2>
+                        <div className="text-[9px] font-mono text-ludo-yellow uppercase tracking-widest mt-1">Level {user.level} Master</div>
+                      </div>
+                    </div>
+
+                    {/* Minimal Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      {stats.map((stat, idx) => (
+                        <div key={idx} className="border-l-2 border-white/5 pl-3 py-1 bg-white/[0.02]">
+                          <div className="text-[8px] text-white/20 font-black uppercase tracking-widest">{stat.label}</div>
+                          <div className={`text-lg md:text-xl font-black font-mono leading-none ${stat.color}`}>{stat.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Level Progress */}
+                    <div className="mb-6 p-4 bg-white/5 border border-white/5">
+                      <div className="flex justify-between text-[8px] font-black uppercase mb-1.5">
+                        <span className="text-white/40">Progression</span>
+                        <span className="text-ludo-yellow">85%</span>
+                      </div>
+                      <div className="h-1 w-full bg-white/10">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: '85%' }}
+                          className="h-full bg-ludo-yellow shadow-[0_0_8px_rgba(255,165,2,0.5)]" 
+                        />
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex flex-col gap-2">
+                      <SharpButton onClick={() => setIsEditing(true)} variant="outline" className="w-full h-10 text-xs" icon={<Edit3 size={14} />}>
+                        Edit Identity
+                      </SharpButton>
+                      <SharpButton onClick={onLogout} variant="ghost" className="w-full h-10 text-xs text-ludo-red/60 hover:text-ludo-red hover:bg-ludo-red/5" icon={<LogOut size={14} />}>
+                        Logout Node
+                      </SharpButton>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </motion.div>

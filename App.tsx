@@ -4,10 +4,12 @@ import { Background } from './components/Background';
 import { Lobby } from './components/Lobby';
 import { TopBar } from './components/TopBar';
 import { SpinWheel } from './components/SpinWheel';
+import { DailyRewardOverlay } from './components/DailyRewardOverlay';
 import { WalletPage } from './components/WalletPage';
 import { GameScreen } from './components/Game/GameScreen';
 import { ProfileOverlay } from './components/ProfileOverlay';
 import { AuthPage } from './components/AuthPage';
+import { TournamentPage } from './components/TournamentPage';
 import { ViewState, User } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -28,16 +30,14 @@ const INITIAL_USER: User = {
 };
 
 const App: React.FC = () => {
-  // Start with AUTH view
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
   const [user, setUser] = useState<User>(INITIAL_USER);
   const [isSpinWheelOpen, setIsSpinWheelOpen] = useState(false);
+  const [isDailyRewardOpen, setIsDailyRewardOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   
-  // Track previous view to determine game mode
   const [gameMode, setGameMode] = useState<'FRIEND' | 'COMPUTER'>('FRIEND');
 
-  // Intercept view change to set mode
   const handleSetView = (newView: ViewState) => {
     if (newView === ViewState.PLAYING_COMPUTER) {
         setGameMode('COMPUTER');
@@ -48,8 +48,17 @@ const App: React.FC = () => {
   };
 
   const handleReward = (amount: number) => {
-    // Animation for coin update
     setUser(prev => ({ ...prev, coins: prev.coins + amount }));
+  };
+
+  const handleDeduct = (amount: number): boolean => {
+    if (user.coins < amount) return false;
+    setUser(prev => ({ ...prev, coins: prev.coins - amount }));
+    return true;
+  };
+
+  const handleUpdateUser = (updates: Partial<User>) => {
+    setUser(prev => ({ ...prev, ...updates }));
   };
 
   const handleLogin = (newUser: User) => {
@@ -64,12 +73,10 @@ const App: React.FC = () => {
 
   return (
     <div className="relative w-full h-screen bg-ludo-dark text-white overflow-hidden font-sans selection:bg-ludo-red selection:text-white">
-      {/* Background Layer */}
       <Background />
 
-      {/* New Top Navigation */}
       <AnimatePresence>
-        {view !== ViewState.GAME && view !== ViewState.WALLET && view !== ViewState.AUTH && (
+        {view !== ViewState.GAME && view !== ViewState.WALLET && view !== ViewState.AUTH && view !== ViewState.TOURNAMENT && (
           <TopBar 
             user={user} 
             onOpenWallet={() => setView(ViewState.WALLET)} 
@@ -79,7 +86,6 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Main Content Area */}
       <main className="relative w-full h-full flex flex-col">
         <AnimatePresence mode="wait">
           {view === ViewState.AUTH ? (
@@ -97,17 +103,35 @@ const App: React.FC = () => {
               onClose={() => setView(ViewState.LOBBY)} 
               onOpenSpin={() => setIsSpinWheelOpen(true)}
             />
+          ) : view === ViewState.TOURNAMENT ? (
+            <TournamentPage 
+              key="tournament"
+              user={user}
+              onClose={() => setView(ViewState.LOBBY)}
+            />
           ) : (
-            <Lobby key="lobby" view={view} setView={handleSetView} />
+            <Lobby 
+              key="lobby" 
+              view={view} 
+              setView={handleSetView} 
+              onOpenDaily={() => setIsDailyRewardOpen(true)} 
+            />
           )}
         </AnimatePresence>
       </main>
 
-      {/* Overlays */}
       <SpinWheel 
         isOpen={isSpinWheelOpen} 
         onClose={() => setIsSpinWheelOpen(false)} 
         onReward={handleReward}
+        onDeduct={handleDeduct}
+        userCoins={user.coins}
+      />
+
+      <DailyRewardOverlay
+        isOpen={isDailyRewardOpen}
+        onClose={() => setIsDailyRewardOpen(false)}
+        onClaim={handleReward}
       />
 
       <ProfileOverlay 
@@ -115,12 +139,9 @@ const App: React.FC = () => {
         user={user}
         onClose={() => setIsProfileOpen(false)}
         onLogout={handleLogout}
-        onEditProfile={() => {
-          console.log('Editing profile...');
-        }}
+        onUpdateUser={handleUpdateUser}
       />
 
-      {/* Simple Footer / Version */}
       {view !== ViewState.GAME && view !== ViewState.WALLET && view !== ViewState.AUTH && (
         <div className="absolute bottom-4 left-6 text-white/20 font-mono text-xs z-10 pointer-events-none">
           v1.0.0 • BETA

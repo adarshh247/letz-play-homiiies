@@ -9,6 +9,7 @@ export enum ViewState {
   PLAYING_COMPUTER = 'PLAYING_COMPUTER',
   GAME = 'GAME',
   WALLET = 'WALLET',
+  TOURNAMENT = 'TOURNAMENT',
 }
 
 export interface UserStats {
@@ -46,4 +47,15 @@ export interface PlayerState {
   isBot: boolean;
   pawns: Pawn[];
   rank?: number; // 1 = 1st, 2 = 2nd, 3 = 3rd, 4 = Loser
+}
+
+export interface Tournament {
+  id: string;
+  title: string;
+  prize: number;
+  entryFee: number;
+  status: 'ongoing' | 'upcoming';
+  startTime?: string;
+  participants: number;
+  maxParticipants: number;
 }
