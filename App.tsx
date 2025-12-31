@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Background } from './components/Background';
 import { Lobby } from './components/Lobby';
 import { TopBar } from './components/TopBar';
@@ -13,6 +13,7 @@ import { TournamentPage } from './components/TournamentPage';
 import { ViewState, User, UserStats, Room, RoomParticipant } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
+import { io, Socket } from 'socket.io-client';
 
 const DEFAULT_STATS: UserStats = {
   gamesWon: 0,
@@ -21,6 +22,9 @@ const DEFAULT_STATS: UserStats = {
   tokensCaptured: 0,
   tournamentsWon: 0
 };
+
+// Change this to your hosted backend URL
+const SOCKET_URL = 'http://localhost:3000';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
@@ -35,11 +39,32 @@ const App: React.FC = () => {
   
   // Room State
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
-  // Listen for auth changes - ONLY ONCE ON MOUNT
+  // Socket Connection
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL);
+    
+    socketRef.current.on('room_updated', (room: Room) => {
+      setCurrentRoom(room);
+    });
+
+    socketRef.current.on('game_started', () => {
+      setView(ViewState.GAME);
+    });
+
+    socketRef.current.on('error', (msg: string) => {
+      alert(msg);
+    });
+
+    return () => {
+      socketRef.current?.disconnect();
+    };
+  }, []);
+
+  // Listen for auth changes
   useEffect(() => {
     const initAuth = async () => {
-      // Initial session check
       const { data: { session: initialSession } } = await supabase.auth.getSession();
       setSession(initialSession);
       
@@ -53,7 +78,6 @@ const App: React.FC = () => {
 
     initAuth();
 
-    // Real-time listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       if (newSession) {
@@ -108,36 +132,14 @@ const App: React.FC = () => {
           level: data.level,
           stats: data.stats || DEFAULT_STATS
         });
-      } else {
-        setUser({
-          id: userId,
-          name: signupName,
-          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-          coins: 1000,
-          level: 1,
-          stats: DEFAULT_STATS
-        });
       }
     } catch (err) {
       console.error('Error in profile fetch:', err);
-      if (!user) {
-        setUser({
-          id: userId,
-          name: 'Guest Homiie',
-          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-          coins: 1000,
-          level: 1,
-          stats: DEFAULT_STATS
-        });
-      }
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Helper to sync updates to DB without relying on local state closure
-   */
   const syncToDB = async (userId: string, updates: any) => {
     try {
       const dbUpdates: any = {};
@@ -185,64 +187,32 @@ const App: React.FC = () => {
     return success;
   }, []);
 
-  const generateRoomCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-  };
-
   const handleCreateRoom = () => {
-    if (!user) return;
-    const code = generateRoomCode();
-    const newRoom: Room = {
-      code,
-      hostId: user.id,
-      participants: [
-        { id: user.id, name: user.name, avatarUrl: user.avatarUrl, isHost: true, isReady: true }
-      ]
-    };
-    setCurrentRoom(newRoom);
+    if (!user || !socketRef.current) return;
+    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    socketRef.current.emit('create_room', { user, roomCode });
     setView(ViewState.CREATE_ROOM);
     setGameMode('FRIEND');
   };
 
-  const handleJoinRoom = (code: string) => {
-    if (!user) return;
-    // Real logic would check DB. For now, simulate.
-    const mockHostId = 'host-123';
-    const joinedRoom: Room = {
-      code,
-      hostId: mockHostId,
-      participants: [
-        { id: mockHostId, name: 'Room Host', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Host', isHost: true, isReady: true },
-        { id: user.id, name: user.name, avatarUrl: user.avatarUrl, isHost: false, isReady: true }
-      ]
-    };
-    setCurrentRoom(joinedRoom);
+  const handleJoinRoom = (roomCode: string) => {
+    if (!user || !socketRef.current) return;
+    socketRef.current.emit('join_room', { user, roomCode });
     setView(ViewState.CREATE_ROOM);
     setGameMode('FRIEND');
   };
 
-  const handleSimulateJoins = () => {
-    if (!currentRoom) return;
-    const mockNames = ['Zoe', 'Alex', 'Riley'];
-    const newParticipants = [...currentRoom.participants];
-    
-    if (newParticipants.length < 4) {
-      const idx = newParticipants.length;
-      newParticipants.push({
-        id: `guest-${idx}`,
-        name: mockNames[idx - 1] || `Player ${idx + 1}`,
-        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${mockNames[idx-1]}`,
-        isHost: false,
-        isReady: true
-      });
-      setCurrentRoom({ ...currentRoom, participants: newParticipants });
-    }
+  const handleStartGame = () => {
+    if (!currentRoom || !socketRef.current) return;
+    socketRef.current.emit('start_game', currentRoom.code);
   };
 
   const handleSetView = (newView: ViewState) => {
     if (newView === ViewState.PLAYING_COMPUTER) {
       setGameMode('COMPUTER');
       setCurrentRoom(null);
+      setView(ViewState.GAME);
+      return;
     } else if (newView === ViewState.FRIEND_OPTIONS) {
       setGameMode('FRIEND');
     } else if (newView === ViewState.CREATE_ROOM) {
@@ -267,14 +237,14 @@ const App: React.FC = () => {
         <motion.div 
           animate={{ rotate: 360 }} 
           transition={{ repeat: Infinity, duration: 1, ease: "linear" }} 
-          className="w-12 h-12 border-4 border-ludo-red border-t-transparent rounded-full shadow-[0_0_20px_rgba(255,71,87,0.3)]" 
+          className="w-12 h-12 border-4 border-ludo-red border-t-transparent rounded-full" 
         />
       </div>
     );
   }
 
   return (
-    <div className="relative w-full h-screen bg-ludo-dark text-white overflow-hidden font-sans selection:bg-ludo-red selection:text-white">
+    <div className="relative w-full h-screen bg-ludo-dark text-white overflow-hidden font-sans">
       <Background />
 
       <AnimatePresence>
@@ -282,7 +252,7 @@ const App: React.FC = () => {
           <TopBar 
             user={user} 
             onOpenWallet={() => setView(ViewState.WALLET)} 
-            onOpenSettings={() => console.log('Settings')} 
+            onOpenSettings={() => {}} 
             onOpenProfile={() => setIsProfileOpen(true)}
           />
         )}
@@ -299,6 +269,8 @@ const App: React.FC = () => {
               onExit={() => { setView(ViewState.LOBBY); setCurrentRoom(null); }} 
               vsComputer={gameMode === 'COMPUTER'}
               participants={currentRoom?.participants}
+              roomCode={currentRoom?.code}
+              socket={socketRef.current}
             />
           ) : view === ViewState.WALLET && user ? (
             <WalletPage 
@@ -321,7 +293,7 @@ const App: React.FC = () => {
               onOpenDaily={() => setIsDailyRewardOpen(true)} 
               currentRoom={currentRoom}
               onJoinRoom={handleJoinRoom}
-              onSimulateJoins={handleSimulateJoins}
+              onStartGame={handleStartGame}
               userId={user?.id}
             />
           )}
@@ -350,12 +322,6 @@ const App: React.FC = () => {
             onUpdateUser={syncProfile}
           />
         </>
-      )}
-
-      {view !== ViewState.GAME && view !== ViewState.WALLET && view !== ViewState.AUTH && (
-        <div className="absolute bottom-4 left-6 text-white/20 font-mono text-[10px] z-10 pointer-events-none uppercase tracking-[0.2em]">
-          Homiies Engine v1.0.0
-        </div>
       )}
     </div>
   );

@@ -35,6 +35,7 @@ export interface RoomParticipant {
   avatarUrl: string;
   isHost: boolean;
   isReady: boolean;
+  socketId?: string;
 }
 
 export interface Room {

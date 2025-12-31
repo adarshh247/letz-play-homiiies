@@ -14,7 +14,8 @@
     "lucide-react": "^0.555.0",
     "framer-motion": "^12.23.25",
     "clsx": "^2.1.1",
-    "@supabase/supabase-js": "^2.45.1"
+    "@supabase/supabase-js": "^2.45.1",
+    "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
