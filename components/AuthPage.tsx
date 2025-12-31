@@ -2,57 +2,66 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SharpButton } from './ui/SharpButton';
-import { User, UserStats } from '../types';
-import { User as UserIcon, Lock, Sparkles, Mail, Phone, UserPlus, LogIn } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { User as UserIcon, Lock, Sparkles, Mail, UserPlus, LogIn } from 'lucide-react';
 
 interface AuthPageProps {
-  onLogin: (user: User) => void;
+  onLogin: (user: any) => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
+export const AuthPage: React.FC<AuthPageProps> = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const [formData, setFormData] = useState({
-    fullName: '',
-    displayName: '',
     email: '',
-    phone: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    fullName: ''
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleAuth = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
+    setLoading(true);
+
     if (!isLogin && formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match!");
+      setErrorMsg("Passwords do not match!");
+      setLoading(false);
       return;
     }
 
-    const mockStats: UserStats = {
-      gamesWon: 0,
-      gamesLost: 0,
-      winStreak: 0,
-      tokensCaptured: 0,
-      tournamentsWon: 0
-    };
-
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: isLogin ? (formData.displayName || 'Guest') : formData.fullName.split(' ')[0],
-      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${formData.displayName || formData.fullName || 'Homiie'}`,
-      coins: 1000,
-      level: 1,
-      stats: mockStats
-    };
-
-    onLogin(newUser);
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: { full_name: formData.fullName }
+          }
+        });
+        if (error) throw error;
+        else setErrorMsg("Check your email for verification link!");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const inputClasses = "w-full h-10 md:h-12 bg-white/5 border border-white/10 rounded-none px-10 text-white font-bold placeholder:text-white/10 focus:border-ludo-red focus:bg-white/10 outline-none transition-all text-xs";
+  const inputClasses = "w-full h-10 md:h-12 bg-white/5 border border-white/10 rounded-none px-10 text-white font-bold placeholder:text-white/20 focus:border-ludo-red focus:bg-white/10 outline-none transition-all text-xs";
   const iconClasses = "absolute left-3 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-ludo-red transition-colors";
   const labelClasses = "text-[8px] font-black text-white/30 uppercase tracking-widest mb-1.5 block";
 
@@ -79,9 +88,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
           <form onSubmit={handleAuth} className="space-y-3 md:space-y-4">
             <AnimatePresence mode="wait">
-              {!isLogin ? (
+              {!isLogin && (
                 <motion.div 
-                  key="signup-fields"
+                  key="signup-name"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
@@ -94,24 +103,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                       <input name="fullName" type="text" value={formData.fullName} onChange={handleChange} placeholder="Full Name" className={inputClasses} required={!isLogin} />
                     </div>
                   </div>
-                  <div className="group relative">
-                    <label className={labelClasses}>Email</label>
-                    <div className="relative">
-                      <Mail className={iconClasses} size={14} />
-                      <input name="email" type="email" value={formData.email} onChange={handleChange} placeholder="Email" className={inputClasses} required={!isLogin} />
-                    </div>
-                  </div>
                 </motion.div>
-              ) : (
-                <div className="group relative">
-                  <label className={labelClasses}>Handle</label>
-                  <div className="relative">
-                    <UserIcon className={iconClasses} size={14} />
-                    <input name="displayName" type="text" value={formData.displayName} onChange={handleChange} placeholder="Display Name" className={inputClasses} required={isLogin} />
-                  </div>
-                </div>
               )}
             </AnimatePresence>
+
+            <div className="group relative">
+              <label className={labelClasses}>Email Address</label>
+              <div className="relative">
+                <Mail className={iconClasses} size={14} />
+                <input name="email" type="email" value={formData.email} onChange={handleChange} placeholder="email@homiies.com" className={inputClasses} required />
+              </div>
+            </div>
 
             <div className="group relative">
               <label className={labelClasses}>Password</label>
@@ -131,14 +133,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
               </div>
             )}
 
-            <SharpButton type="submit" className="w-full h-12 md:h-14 mt-4" variant="accent">
-              {isLogin ? 'Login' : 'Join Arena'}
+            {errorMsg && (
+              <div className="text-[10px] text-ludo-red font-bold uppercase tracking-widest text-center mt-2">
+                {errorMsg}
+              </div>
+            )}
+
+            <SharpButton type="submit" disabled={loading} className="w-full h-12 md:h-14 mt-4" variant="accent">
+              {loading ? 'Processing...' : (isLogin ? 'Login' : 'Join Arena')}
             </SharpButton>
           </form>
 
           <div className="mt-6 md:mt-8 text-center border-t border-white/5 pt-4">
             <button 
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
               className="text-white/20 text-[9px] hover:text-white transition-colors uppercase font-black tracking-widest underline decoration-ludo-red underline-offset-4"
             >
               {isLogin ? "Create Account" : "Return to Login"}
@@ -147,7 +155,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
         </motion.div>
 
         <div className="mt-6 text-center opacity-10">
-          <p className="text-[8px] font-mono uppercase tracking-[0.5em] text-white">Secure Gateway v1.0</p>
+          <p className="text-[8px] font-mono uppercase tracking-[0.5em] text-white">Cloud Synced Arena</p>
         </div>
       </div>
     </motion.div>

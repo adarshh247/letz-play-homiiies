@@ -6,11 +6,12 @@ import { LudoBoard } from './LudoBoard';
 import { Dice } from './Dice';
 import { DIYControl } from './DIYControl';
 import { SharpButton } from '../ui/SharpButton';
-import { PlayerState, PlayerColor } from '../../types';
+import { PlayerState, PlayerColor, User } from '../../types';
 import { isValidMove, SAFE_INDICES, PLAYER_START_OFFSETS } from './gameUtils';
 import { X, Trophy, Wand2, Crown, Sparkles, Hash } from 'lucide-react';
 
 interface GameScreenProps {
+  user: User;
   onExit: () => void;
   vsComputer?: boolean;
 }
@@ -18,11 +19,11 @@ interface GameScreenProps {
 const TURN_DURATION = 15000; // 15 seconds
 const MOVE_STEP_DELAY = 180; // Snappier movement
 
-export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = false }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer = false }) => {
   // --- Game State ---
   const [players, setPlayers] = useState<PlayerState[]>([
     { 
-      id: 'p1', name: 'You', color: 'red', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', 
+      id: 'p1', name: user.name, color: 'red', avatarUrl: user.avatarUrl, 
       isBot: false, 
       pawns: [0,1,2,3].map(i => ({ id: `red-${i}`, color: 'red', location: -1 })) 
     },
@@ -59,16 +60,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
   const [diyUnlocked, setDiyUnlocked] = useState(false);
   const [diyActive, setDiyActive] = useState(false);
   const [showDiyPopup, setShowDiyPopup] = useState(false);
-  const diySelectedRef = useRef<number | null>(null);
 
   const currentPlayer = players[turnIndex];
 
-  // Helper to get number of finished players
   const getFinishedCount = useCallback(() => {
     return players.filter(p => p.rank).length;
   }, [players]);
 
-  // --- Core Game Logic ---
   const nextTurn = useCallback(() => {
     if (getFinishedCount() >= 3) {
       setIsGameOver(true);
@@ -83,12 +81,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
     setTurnIndex(prevIndex => {
       let nextIndex = (prevIndex + 1) % 4;
       let loopCount = 0;
-      
       while (players[nextIndex].rank && loopCount < 4) {
         nextIndex = (nextIndex + 1) % 4;
         loopCount++;
       }
-      
       if (loopCount >= 4) return prevIndex;
       if (diceValue === 6 && !players[prevIndex].rank) {
          return prevIndex;
@@ -97,40 +93,39 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
     });
   }, [diceValue, players, getFinishedCount]);
 
+  const finishRoll = useCallback((finalVal: number) => {
+    setDiceValue(finalVal);
+    setIsRolling(false);
+    setHasRolled(true);
+    const moves: string[] = [];
+    currentPlayer.pawns.forEach(pawn => {
+      if (isValidMove(pawn.location, finalVal)) {
+        moves.push(pawn.id);
+      }
+    });
+    setValidMovePawns(moves);
+    if (moves.length === 0) {
+      setTimeout(nextTurn, 1000);
+    }
+  }, [currentPlayer, nextTurn]);
+
   const handleRoll = useCallback(() => {
     if (isRolling || hasRolled || isGameOver || isMovingPawn || currentPlayer.rank) return;
     setIsRolling(true);
+    
     if (diyActive && !currentPlayer.isBot) {
       setShowDiyPopup(true);
-      diySelectedRef.current = null;
+    } else {
+      setTimeout(() => {
+        finishRoll(Math.floor(Math.random() * 6) + 1);
+      }, 600);
     }
-    const rollDuration = (diyActive && !currentPlayer.isBot) ? 1800 : 600; 
-    setTimeout(() => {
-      let rolledValue = Math.floor(Math.random() * 6) + 1;
-      if (diyActive && !currentPlayer.isBot) {
-        setShowDiyPopup(false);
-        if (diySelectedRef.current !== null) {
-          rolledValue = diySelectedRef.current;
-        }
-      }
-      setDiceValue(rolledValue);
-      setIsRolling(false);
-      setHasRolled(true);
-      const moves: string[] = [];
-      currentPlayer.pawns.forEach(pawn => {
-        if (isValidMove(pawn.location, rolledValue)) {
-          moves.push(pawn.id);
-        }
-      });
-      setValidMovePawns(moves);
-      if (moves.length === 0) {
-        setTimeout(nextTurn, 1000);
-      }
-    }, rollDuration);
-  }, [currentPlayer, isRolling, hasRolled, isGameOver, isMovingPawn, nextTurn, diyActive]);
+  }, [currentPlayer, isRolling, hasRolled, isGameOver, isMovingPawn, diyActive, finishRoll]);
 
   const handleDiySelect = (value: number) => {
-    diySelectedRef.current = value;
+    setShowDiyPopup(false);
+    // Add small delay for aesthetic before finishing
+    setTimeout(() => finishRoll(value), 400);
   };
 
   const handlePawnClick = (playerId: string, pawnId: string) => {
@@ -374,7 +369,6 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey,
   const colorStyles = { red: 'stroke-ludo-red', green: 'stroke-ludo-green', blue: 'stroke-ludo-blue', yellow: 'stroke-ludo-yellow' };
   const diceColors = { red: '#FF4757', green: '#2ED573', blue: '#1E90FF', yellow: '#FFA502' };
 
-  // Fixed visual box dimensions for the decreasing border timer
   const cardW = 100;
   const cardH = 40;
   const perimeter = (cardW + cardH) * 2;
@@ -384,13 +378,11 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey,
       "flex items-center gap-2 transition-all duration-300",
       diceSide === 'right' ? 'flex-row' : 'flex-row-reverse'
     )}>
-       {/* Compact Profile Card with DECREASING Border Timer */}
        <div className={clsx(
           "relative transition-all duration-300 flex items-center bg-white/5 rounded-lg overflow-hidden p-1 gap-2",
           active ? "scale-105 z-30 shadow-[0_0_20px_rgba(0,0,0,0.5)]" : "grayscale opacity-30",
        )} style={{ width: cardW, height: cardH }}>
           
-          {/* Border Timer SVG: Decreasing manner (shrinks as time passes) */}
           {active && !player.rank && (
              <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox={`0 0 ${cardW} ${cardH}`}>
                <motion.rect
@@ -401,13 +393,11 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey,
                  strokeWidth="2.5"
                  className={colorStyles[player.color]}
                  strokeDasharray={perimeter}
-                 // Starting offset 0 (full) to perimeter (empty)
                  initial={{ strokeDashoffset: 0 }}
                  animate={{ strokeDashoffset: perimeter }}
                  transition={{ duration: TURN_DURATION / 1000, ease: "linear" }}
                  strokeLinecap="round"
                />
-               {/* Static faint background border */}
                <rect x="1" y="1" width={cardW - 2} height={cardH - 2} rx="7" ry="7" fill="none" strokeWidth="1" className="stroke-white/5" />
              </svg>
           )}
@@ -431,7 +421,6 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey,
           )}
        </div>
 
-       {/* DICE BOX - Dice only appears on respective player's turn */}
        <div className={clsx(
          "w-10 h-10 md:w-11 md:h-11 bg-white/[0.03] border border-white/5 rounded-lg flex items-center justify-center relative overflow-hidden transition-all duration-300",
          active ? "border-white/20 bg-white/10" : "opacity-10"
@@ -456,8 +445,6 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey,
               </motion.div>
             )}
           </AnimatePresence>
-          
-          {/* Subtle placeholder when empty */}
           {!active && !player.rank && (
              <div className="w-1.5 h-1.5 bg-white/10 rounded-full animate-pulse" />
           )}

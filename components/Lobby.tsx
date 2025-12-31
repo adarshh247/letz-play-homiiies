@@ -42,9 +42,9 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
   };
 
   return (
-    <div className="relative z-10 flex flex-col items-center justify-start sm:justify-center min-h-screen w-full px-6 py-12 overflow-y-auto">
+    <div className="relative z-10 flex flex-col items-center justify-start md:justify-center h-full w-full px-6 py-12 overflow-y-auto pointer-events-auto">
       {/* Super Minimal Header */}
-      <div className="mb-8 md:mb-12 text-center flex-shrink-0 mt-16 md:mt-0">
+      <div className="mb-8 md:mb-12 text-center flex-shrink-0 mt-20 md:mt-0">
         <AnimatePresence mode="wait">
           <motion.h1 
             key={view}
@@ -59,7 +59,7 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
         <div className="h-1 w-10 bg-ludo-red mx-auto mt-2" />
       </div>
 
-      <div className="w-full max-w-sm flex-shrink-0">
+      <div className="w-full max-w-sm flex-shrink-0 pb-12">
         <AnimatePresence mode="wait">
           {/* COMPACT MAIN MENU */}
           {view === ViewState.LOBBY && (
