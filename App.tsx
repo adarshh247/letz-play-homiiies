@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Background } from './components/Background';
 import { Lobby } from './components/Lobby';
 import { TopBar } from './components/TopBar';
@@ -10,7 +10,7 @@ import { GameScreen } from './components/Game/GameScreen';
 import { ProfileOverlay } from './components/ProfileOverlay';
 import { AuthPage } from './components/AuthPage';
 import { TournamentPage } from './components/TournamentPage';
-import { ViewState, User, UserStats } from './types';
+import { ViewState, User, UserStats, Room, RoomParticipant } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
 
@@ -32,6 +32,9 @@ const App: React.FC = () => {
   const [isDailyRewardOpen, setIsDailyRewardOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [gameMode, setGameMode] = useState<'FRIEND' | 'COMPUTER'>('FRIEND');
+  
+  // Room State
+  const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
 
   // Listen for auth changes - ONLY ONCE ON MOUNT
   useEffect(() => {
@@ -41,7 +44,6 @@ const App: React.FC = () => {
       setSession(initialSession);
       
       if (initialSession) {
-        // Use functional update to check current view without depending on it
         setView(currentView => currentView === ViewState.AUTH ? ViewState.LOBBY : currentView);
         fetchProfile(initialSession.user.id);
       } else {
@@ -55,7 +57,6 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       if (newSession) {
-        // Only redirect to LOBBY if we are currently at the AUTH page
         setView(currentView => currentView === ViewState.AUTH ? ViewState.LOBBY : currentView);
         fetchProfile(newSession.user.id);
       } else {
@@ -66,11 +67,10 @@ const App: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, []); // Dependency array is empty to prevent re-running on view changes
+  }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
-      // Get auth metadata to check for signup name
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const signupName = authUser?.user_metadata?.full_name || 'Homiie';
 
@@ -81,7 +81,6 @@ const App: React.FC = () => {
         .single();
 
       if (error && (error.code === 'PGRST116' || error.message.includes('not found'))) {
-        // Profile doesn't exist, create it with the signup name
         const newProfile = {
           id: userId,
           name: signupName,
@@ -90,7 +89,7 @@ const App: React.FC = () => {
           level: 1,
           stats: DEFAULT_STATS
         };
-        const { error: insertError } = await supabase.from('profiles').insert([newProfile]);
+        await supabase.from('profiles').insert([newProfile]);
         
         setUser({
           id: userId,
@@ -110,7 +109,6 @@ const App: React.FC = () => {
           stats: data.stats || DEFAULT_STATS
         });
       } else {
-        // Fallback for unexpected errors (like missing table)
         setUser({
           id: userId,
           name: signupName,
@@ -137,13 +135,10 @@ const App: React.FC = () => {
     }
   };
 
-  const syncProfile = async (updates: Partial<User>) => {
-    if (!user) return;
-    
-    // Optimistic update
-    const updatedUser = { ...user, ...updates };
-    setUser(updatedUser);
-
+  /**
+   * Helper to sync updates to DB without relying on local state closure
+   */
+  const syncToDB = async (userId: string, updates: any) => {
     try {
       const dbUpdates: any = {};
       if (updates.name !== undefined) dbUpdates.name = updates.name;
@@ -151,30 +146,110 @@ const App: React.FC = () => {
       if (updates.coins !== undefined) dbUpdates.coins = updates.coins;
       if (updates.level !== undefined) dbUpdates.level = updates.level;
       if (updates.stats !== undefined) dbUpdates.stats = updates.stats;
-
-      await supabase
-        .from('profiles')
-        .update(dbUpdates)
-        .eq('id', user.id);
+      await supabase.from('profiles').update(dbUpdates).eq('id', userId);
     } catch (e) {
-      console.warn('Silent sync failure (DB probably not configured):', e);
+      console.warn('DB Sync failure:', e);
+    }
+  };
+
+  const syncProfile = (updates: Partial<User>) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      syncToDB(prev.id, updates);
+      return updated;
+    });
+  };
+
+  const handleReward = useCallback((amount: number) => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const newCoins = prev.coins + amount;
+      syncToDB(prev.id, { coins: newCoins });
+      return { ...prev, coins: newCoins };
+    });
+  }, []);
+
+  const handleDeduct = useCallback((amount: number): boolean => {
+    let success = false;
+    setUser(prev => {
+      if (!prev || prev.coins < amount) {
+        success = false;
+        return prev;
+      }
+      success = true;
+      const newCoins = prev.coins - amount;
+      syncToDB(prev.id, { coins: newCoins });
+      return { ...prev, coins: newCoins };
+    });
+    return success;
+  }, []);
+
+  const generateRoomCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
+  const handleCreateRoom = () => {
+    if (!user) return;
+    const code = generateRoomCode();
+    const newRoom: Room = {
+      code,
+      hostId: user.id,
+      participants: [
+        { id: user.id, name: user.name, avatarUrl: user.avatarUrl, isHost: true, isReady: true }
+      ]
+    };
+    setCurrentRoom(newRoom);
+    setView(ViewState.CREATE_ROOM);
+    setGameMode('FRIEND');
+  };
+
+  const handleJoinRoom = (code: string) => {
+    if (!user) return;
+    // Real logic would check DB. For now, simulate.
+    const mockHostId = 'host-123';
+    const joinedRoom: Room = {
+      code,
+      hostId: mockHostId,
+      participants: [
+        { id: mockHostId, name: 'Room Host', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Host', isHost: true, isReady: true },
+        { id: user.id, name: user.name, avatarUrl: user.avatarUrl, isHost: false, isReady: true }
+      ]
+    };
+    setCurrentRoom(joinedRoom);
+    setView(ViewState.CREATE_ROOM);
+    setGameMode('FRIEND');
+  };
+
+  const handleSimulateJoins = () => {
+    if (!currentRoom) return;
+    const mockNames = ['Zoe', 'Alex', 'Riley'];
+    const newParticipants = [...currentRoom.participants];
+    
+    if (newParticipants.length < 4) {
+      const idx = newParticipants.length;
+      newParticipants.push({
+        id: `guest-${idx}`,
+        name: mockNames[idx - 1] || `Player ${idx + 1}`,
+        avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${mockNames[idx-1]}`,
+        isHost: false,
+        isReady: true
+      });
+      setCurrentRoom({ ...currentRoom, participants: newParticipants });
     }
   };
 
   const handleSetView = (newView: ViewState) => {
-    if (newView === ViewState.PLAYING_COMPUTER) setGameMode('COMPUTER');
-    else if (newView === ViewState.FRIEND_OPTIONS || newView === ViewState.CREATE_ROOM) setGameMode('FRIEND');
+    if (newView === ViewState.PLAYING_COMPUTER) {
+      setGameMode('COMPUTER');
+      setCurrentRoom(null);
+    } else if (newView === ViewState.FRIEND_OPTIONS) {
+      setGameMode('FRIEND');
+    } else if (newView === ViewState.CREATE_ROOM) {
+      handleCreateRoom();
+      return;
+    }
     setView(newView);
-  };
-
-  const handleReward = (amount: number) => {
-    if (user) syncProfile({ coins: user.coins + amount });
-  };
-
-  const handleDeduct = (amount: number): boolean => {
-    if (!user || user.coins < amount) return false;
-    syncProfile({ coins: user.coins - amount });
-    return true;
   };
 
   const handleLogout = async () => {
@@ -221,8 +296,9 @@ const App: React.FC = () => {
             <GameScreen 
               key="game"
               user={user}
-              onExit={() => setView(ViewState.LOBBY)} 
+              onExit={() => { setView(ViewState.LOBBY); setCurrentRoom(null); }} 
               vsComputer={gameMode === 'COMPUTER'}
+              participants={currentRoom?.participants}
             />
           ) : view === ViewState.WALLET && user ? (
             <WalletPage 
@@ -243,6 +319,10 @@ const App: React.FC = () => {
               view={view} 
               setView={handleSetView} 
               onOpenDaily={() => setIsDailyRewardOpen(true)} 
+              currentRoom={currentRoom}
+              onJoinRoom={handleJoinRoom}
+              onSimulateJoins={handleSimulateJoins}
+              userId={user?.id}
             />
           )}
         </AnimatePresence>

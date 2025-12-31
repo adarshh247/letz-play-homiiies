@@ -6,7 +6,7 @@ import { LudoBoard } from './LudoBoard';
 import { Dice } from './Dice';
 import { DIYControl } from './DIYControl';
 import { SharpButton } from '../ui/SharpButton';
-import { PlayerState, PlayerColor, User } from '../../types';
+import { PlayerState, PlayerColor, User, RoomParticipant } from '../../types';
 import { isValidMove, SAFE_INDICES, PLAYER_START_OFFSETS } from './gameUtils';
 import { X, Trophy, Wand2, Crown, Sparkles, Hash } from 'lucide-react';
 
@@ -14,35 +14,67 @@ interface GameScreenProps {
   user: User;
   onExit: () => void;
   vsComputer?: boolean;
+  participants?: RoomParticipant[];
 }
 
 const TURN_DURATION = 15000; // 15 seconds
 const MOVE_STEP_DELAY = 180; // Snappier movement
 
-export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer = false }) => {
+export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer = false, participants }) => {
   // --- Game State ---
-  const [players, setPlayers] = useState<PlayerState[]>([
-    { 
-      id: 'p1', name: user.name, color: 'red', avatarUrl: user.avatarUrl, 
-      isBot: false, 
-      pawns: [0,1,2,3].map(i => ({ id: `red-${i}`, color: 'red', location: -1 })) 
-    },
-    { 
-      id: 'p2', name: vsComputer ? 'Bot Blue' : 'Player 2', color: 'blue', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', 
-      isBot: vsComputer, 
-      pawns: [0,1,2,3].map(i => ({ id: `blue-${i}`, color: 'blue', location: -1 })) 
-    },
-    { 
-      id: 'p3', name: vsComputer ? 'Bot Yellow' : 'Player 3', color: 'yellow', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', 
-      isBot: vsComputer, 
-      pawns: [0,1,2,3].map(i => ({ id: `yellow-${i}`, color: 'yellow', location: -1 })) 
-    },
-    { 
-      id: 'p4', name: vsComputer ? 'Bot Green' : 'Player 4', color: 'green', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka', 
-      isBot: vsComputer, 
-      pawns: [0,1,2,3].map(i => ({ id: `green-${i}`, color: 'green', location: -1 })) 
-    },
-  ]);
+  const [players, setPlayers] = useState<PlayerState[]>(() => {
+    const colors: PlayerColor[] = ['red', 'blue', 'yellow', 'green'];
+    
+    // If we have participants from a multiplayer lobby, use them
+    if (participants && participants.length > 0) {
+      return colors.map((color, index) => {
+        const participant = participants[index];
+        if (participant) {
+          return {
+            id: participant.id,
+            name: participant.name,
+            color,
+            avatarUrl: participant.avatarUrl,
+            isBot: false,
+            pawns: [0, 1, 2, 3].map(i => ({ id: `${color}-${i}`, color, location: -1 }))
+          };
+        }
+        // Fallback to bot if for some reason a slot is empty
+        return {
+          id: `bot-${color}`,
+          name: `Bot ${color.toUpperCase()}`,
+          color,
+          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=Bot${color}`,
+          isBot: true,
+          pawns: [0, 1, 2, 3].map(i => ({ id: `${color}-${i}`, color, location: -1 }))
+        };
+      });
+    }
+
+    // Default initialization (Solo vs AI or Local)
+    return [
+      { 
+        id: 'p1', name: user.name, color: 'red', avatarUrl: user.avatarUrl, 
+        isBot: false, 
+        pawns: [0,1,2,3].map(i => ({ id: `red-${i}`, color: 'red', location: -1 })) 
+      },
+      { 
+        id: 'p2', name: vsComputer ? 'Bot Blue' : 'Player 2', color: 'blue', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', 
+        isBot: vsComputer, 
+        pawns: [0,1,2,3].map(i => ({ id: `blue-${i}`, color: 'blue', location: -1 })) 
+      },
+      { 
+        id: 'p3', name: vsComputer ? 'Bot Yellow' : 'Player 3', color: 'yellow', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', 
+        isBot: vsComputer, 
+        pawns: [0,1,2,3].map(i => ({ id: `yellow-${i}`, color: 'yellow', location: -1 })) 
+      },
+      { 
+        id: 'p4', name: vsComputer ? 'Bot Green' : 'Player 4', color: 'green', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka', 
+        isBot: vsComputer, 
+        pawns: [0,1,2,3].map(i => ({ id: `green-${i}`, color: 'green', location: -1 })) 
+      },
+    ];
+  });
 
   const [turnIndex, setTurnIndex] = useState(0);
   const [diceValue, setDiceValue] = useState(1);

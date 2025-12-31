@@ -1,17 +1,31 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, ShieldAlert } from 'lucide-react';
+import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, ShieldAlert, UserPlus, Shield } from 'lucide-react';
 import { SharpButton } from './ui/SharpButton';
-import { ViewState } from '../types';
+import { ViewState, Room } from '../types';
 
 interface LobbyProps {
   view: ViewState;
   setView: (view: ViewState) => void;
   onOpenDaily?: () => void;
+  currentRoom: Room | null;
+  onJoinRoom: (code: string) => void;
+  onSimulateJoins: () => void;
+  userId?: string;
 }
 
-export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
+export const Lobby: React.FC<LobbyProps> = ({ 
+  view, 
+  setView, 
+  onOpenDaily, 
+  currentRoom, 
+  onJoinRoom, 
+  onSimulateJoins,
+  userId
+}) => {
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+
   const containerVariants = {
     hidden: { opacity: 0, y: 10 },
     visible: { 
@@ -33,17 +47,21 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
   const getTitle = () => {
     switch (view) {
       case ViewState.FRIEND_OPTIONS: return "Gather Friends";
-      case ViewState.CREATE_ROOM: return "Host Match";
-      case ViewState.JOIN_ROOM: return "Join Match";
+      case ViewState.CREATE_ROOM: return "Match Lobby";
+      case ViewState.JOIN_ROOM: return "Enter Arena";
       case ViewState.PLAYING_COMPUTER: return "Practice Mode";
       case ViewState.TOURNAMENT: return "Arena Protocol";
       default: return "Play Homiies";
     }
   };
 
+  const isHost = currentRoom?.hostId === userId;
+  const participantCount = currentRoom?.participants.length || 0;
+  const isRoomFull = participantCount === 4;
+
   return (
     <div className="relative z-10 flex flex-col items-center justify-start md:justify-center h-full w-full px-6 py-12 overflow-y-auto pointer-events-auto">
-      {/* Super Minimal Header */}
+      {/* Header */}
       <div className="mb-8 md:mb-12 text-center flex-shrink-0 mt-20 md:mt-0">
         <AnimatePresence mode="wait">
           <motion.h1 
@@ -61,7 +79,7 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
 
       <div className="w-full max-w-sm flex-shrink-0 pb-12">
         <AnimatePresence mode="wait">
-          {/* COMPACT MAIN MENU */}
+          {/* MAIN MENU */}
           {view === ViewState.LOBBY && (
             <motion.div 
               key="main-menu"
@@ -131,6 +149,7 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
             </motion.div>
           )}
 
+          {/* FRIEND OPTIONS */}
           {view === ViewState.FRIEND_OPTIONS && (
             <motion.div 
               key="friend-options"
@@ -166,41 +185,104 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
             </motion.div>
           )}
 
-          {view === ViewState.CREATE_ROOM && (
+          {/* CREATE ROOM / WAITING ROOM */}
+          {view === ViewState.CREATE_ROOM && currentRoom && (
             <motion.div 
               key="create-room"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="flex flex-col gap-4 bg-white/5 p-5 border border-white/10"
+              className="flex flex-col gap-4 bg-black/40 backdrop-blur-xl p-5 border border-white/10"
             >
                <div className="text-center py-2 md:py-4 border-b border-white/5">
-                  <span className="text-[9px] text-white/30 uppercase font-black tracking-widest mb-1 block">Room Secret</span>
-                  <div className="text-2xl md:text-3xl font-black text-ludo-red tracking-widest">HM-92X</div>
+                  <span className="text-[9px] text-white/30 uppercase font-black tracking-widest mb-1 block">Room Protocol Code</span>
+                  <div className="text-2xl md:text-3xl font-black text-ludo-red tracking-[0.3em] font-mono">{currentRoom.code}</div>
                </div>
                
+               {/* Participant Slots */}
                <div className="py-2 space-y-2">
-                 <div className="flex justify-between items-center text-[10px] uppercase font-black text-ludo-green">
-                    <span>You (Master)</span>
-                    <span>Ready</span>
-                 </div>
-                 <div className="flex justify-between items-center text-[10px] uppercase font-black text-white/20 animate-pulse">
-                    <span>Awaiting Friend...</span>
-                 </div>
+                 {[0, 1, 2, 3].map((idx) => {
+                   const participant = currentRoom.participants[idx];
+                   return (
+                     <div 
+                       key={idx} 
+                       className={`flex items-center justify-between p-2 border transition-colors ${participant ? 'border-white/10 bg-white/5' : 'border-dashed border-white/5 opacity-40'}`}
+                     >
+                        <div className="flex items-center gap-3">
+                           {participant ? (
+                             <>
+                               <div className="w-8 h-8 border border-white/10 overflow-hidden bg-white/5">
+                                 <img src={participant.avatarUrl} className="w-full h-full object-cover" />
+                               </div>
+                               <div className="flex flex-col">
+                                 <span className="text-[10px] font-black text-white uppercase tracking-wider">{participant.name}</span>
+                                 {participant.isHost && (
+                                   <div className="flex items-center gap-1 text-ludo-yellow text-[7px] font-black uppercase tracking-widest">
+                                     <Shield size={8} /> Host
+                                   </div>
+                                 )}
+                               </div>
+                             </>
+                           ) : (
+                             <>
+                               <div className="w-8 h-8 bg-white/5 flex items-center justify-center">
+                                 <UserPlus size={14} className="text-white/20" />
+                               </div>
+                               <span className="text-[8px] font-black text-white/20 uppercase tracking-[0.2em]">Open Slot...</span>
+                             </>
+                           )}
+                        </div>
+                        {participant && (
+                          <div className="flex items-center gap-1">
+                             <div className="w-1.5 h-1.5 bg-ludo-green shadow-[0_0_8px_rgba(46,213,115,0.4)]" />
+                             <span className="text-[8px] font-black text-ludo-green uppercase">Ready</span>
+                          </div>
+                        )}
+                     </div>
+                   );
+                 })}
                </div>
 
+               {/* Simulation Control (Only for debugging/demo) */}
+               {!isRoomFull && (
+                 <button 
+                  onClick={onSimulateJoins}
+                  className="text-[8px] text-white/20 hover:text-white/40 transition-colors uppercase font-mono tracking-widest mb-2 text-center w-full underline underline-offset-4"
+                 >
+                   [ Sim. Player Join ]
+                 </button>
+               )}
+
                <div className="flex flex-col gap-2 pt-2">
-                  <SharpButton variant="primary" onClick={() => setView(ViewState.GAME)} className="w-full h-12" icon={<Play size={16} />}>
-                    Start Match
-                  </SharpButton>
+                  {isHost ? (
+                    <>
+                      <SharpButton 
+                        variant={isRoomFull ? "primary" : "outline"}
+                        disabled={!isRoomFull}
+                        onClick={() => setView(ViewState.GAME)} 
+                        className="w-full h-12" 
+                        icon={<Play size={16} />}
+                      >
+                        Start Match
+                      </SharpButton>
+                      {!isRoomFull && (
+                        <p className="text-[8px] text-center text-white/30 uppercase font-black tracking-widest mt-1">Waiting for {4 - participantCount} more players</p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-3 bg-white/5 border border-white/5 text-center">
+                       <p className="text-[9px] font-black text-white/40 uppercase tracking-[0.3em] animate-pulse">Awaiting Host Authorization...</p>
+                    </div>
+                  )}
                   <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} className="w-full h-10 text-[9px]">
-                    Cancel
+                    Abandon Room
                   </SharpButton>
                </div>
             </motion.div>
           )}
 
+          {/* JOIN ROOM */}
           {view === ViewState.JOIN_ROOM && (
             <motion.div 
               key="join-room"
@@ -211,17 +293,25 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
               className="flex flex-col gap-4 bg-white/5 p-5 border border-white/10"
             >
                <div className="space-y-2">
-                  <label className="text-[9px] text-white/30 uppercase font-black tracking-widest">Access Key</label>
+                  <label className="text-[9px] text-white/30 uppercase font-black tracking-widest">Access Protocol Key</label>
                   <input 
                     type="text" 
+                    value={joinCodeInput}
+                    onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                     placeholder="HM-XXXX"
-                    className="w-full bg-black/40 border border-white/10 p-3 md:p-4 text-xl font-black text-white outline-none focus:border-ludo-red transition-all uppercase tracking-widest rounded-none"
+                    maxLength={6}
+                    className="w-full bg-black/40 border border-white/10 p-3 md:p-4 text-xl font-black text-white outline-none focus:border-ludo-red transition-all uppercase tracking-[0.3em] rounded-none font-mono"
                   />
                </div>
 
                <div className="flex flex-col gap-2 mt-2">
-                  <SharpButton variant="primary" onClick={() => setView(ViewState.GAME)} className="w-full h-12">
-                    Connect
+                  <SharpButton 
+                    variant="primary" 
+                    onClick={() => onJoinRoom(joinCodeInput)} 
+                    disabled={joinCodeInput.length < 6}
+                    className="w-full h-12"
+                  >
+                    Establish Link
                   </SharpButton>
                   <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} className="w-full h-10 text-[9px]">
                     Back
@@ -230,6 +320,7 @@ export const Lobby: React.FC<LobbyProps> = ({ view, setView, onOpenDaily }) => {
             </motion.div>
           )}
 
+          {/* SOLO vs AI */}
           {view === ViewState.PLAYING_COMPUTER && (
              <motion.div 
                key="computer"

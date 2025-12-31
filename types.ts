@@ -29,6 +29,20 @@ export interface User {
   stats: UserStats;
 }
 
+export interface RoomParticipant {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  isHost: boolean;
+  isReady: boolean;
+}
+
+export interface Room {
+  code: string;
+  hostId: string;
+  participants: RoomParticipant[];
+}
+
 export const COIN_REWARDS = [50, 100, 200, 500, 1000, 0];
 
 export type PlayerColor = 'red' | 'green' | 'yellow' | 'blue';
