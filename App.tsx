@@ -23,7 +23,7 @@ const DEFAULT_STATS: UserStats = {
   tournamentsWon: 0
 };
 
-// Change this to your hosted backend URL
+// IMPORTANT: In production, change this to your actual deployed backend URL
 const SOCKET_URL = 'http://localhost:3000';
 
 const App: React.FC = () => {
@@ -39,12 +39,30 @@ const App: React.FC = () => {
   
   // Room State
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
   // Socket Connection
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL);
+    socketRef.current = io(SOCKET_URL, {
+      reconnectionAttempts: 5,
+      timeout: 5000,
+    });
     
+    socketRef.current.on('connect', () => {
+      console.log('Connected to Homiies Server');
+      setSocketConnected(true);
+    });
+
+    socketRef.current.on('disconnect', () => {
+      console.log('Disconnected from Homiies Server');
+      setSocketConnected(false);
+    });
+
+    socketRef.current.on('connect_error', () => {
+      setSocketConnected(false);
+    });
+
     socketRef.current.on('room_updated', (room: Room) => {
       setCurrentRoom(room);
     });
@@ -188,23 +206,53 @@ const App: React.FC = () => {
   }, []);
 
   const handleCreateRoom = () => {
-    if (!user || !socketRef.current) return;
+    if (!user) return;
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    socketRef.current.emit('create_room', { user, roomCode });
+    
+    if (socketConnected && socketRef.current) {
+      socketRef.current.emit('create_room', { user, roomCode });
+    } else {
+      // Offline/Simulation Mode Support
+      console.warn('Socket not connected. Preparing simulated room.');
+    }
+    
     setView(ViewState.CREATE_ROOM);
     setGameMode('FRIEND');
   };
 
   const handleJoinRoom = (roomCode: string) => {
-    if (!user || !socketRef.current) return;
-    socketRef.current.emit('join_room', { user, roomCode });
+    if (!user) return;
+    if (socketConnected && socketRef.current) {
+      socketRef.current.emit('join_room', { user, roomCode });
+    } else {
+      alert("Multiplayer server unreachable. Using local simulation.");
+      simulateRoom(roomCode);
+    }
     setView(ViewState.CREATE_ROOM);
     setGameMode('FRIEND');
   };
 
+  const simulateRoom = (code: string) => {
+    if (!user) return;
+    setCurrentRoom({
+      code,
+      hostId: user.id,
+      participants: [{
+        id: user.id,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        isHost: true,
+        isReady: true
+      }]
+    });
+  };
+
   const handleStartGame = () => {
-    if (!currentRoom || !socketRef.current) return;
-    socketRef.current.emit('start_game', currentRoom.code);
+    if (socketConnected && socketRef.current && currentRoom) {
+      socketRef.current.emit('start_game', currentRoom.code);
+    } else {
+      setView(ViewState.GAME);
+    }
   };
 
   const handleSetView = (newView: ViewState) => {
@@ -295,6 +343,8 @@ const App: React.FC = () => {
               onJoinRoom={handleJoinRoom}
               onStartGame={handleStartGame}
               userId={user?.id}
+              socketConnected={socketConnected}
+              onSimulateRoom={() => simulateRoom(Math.random().toString(36).substring(2, 8).toUpperCase())}
             />
           )}
         </AnimatePresence>
