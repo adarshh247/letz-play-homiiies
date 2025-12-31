@@ -8,7 +8,7 @@ import { DIYControl } from './DIYControl';
 import { SharpButton } from '../ui/SharpButton';
 import { PlayerState, PlayerColor } from '../../types';
 import { isValidMove, SAFE_INDICES, PLAYER_START_OFFSETS } from './gameUtils';
-import { X, Trophy, Wand2, Crown, Gem, Coins, Frown } from 'lucide-react';
+import { X, Trophy, Wand2, Crown, Sparkles, Hash } from 'lucide-react';
 
 interface GameScreenProps {
   onExit: () => void;
@@ -16,6 +16,7 @@ interface GameScreenProps {
 }
 
 const TURN_DURATION = 15000; // 15 seconds
+const MOVE_STEP_DELAY = 180; // Snappier movement
 
 export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = false }) => {
   // --- Game State ---
@@ -26,9 +27,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
       pawns: [0,1,2,3].map(i => ({ id: `red-${i}`, color: 'red', location: -1 })) 
     },
     { 
-      id: 'p2', name: vsComputer ? 'Bot Green' : 'Player 2', color: 'green', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka', 
+      id: 'p2', name: vsComputer ? 'Bot Blue' : 'Player 2', color: 'blue', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', 
       isBot: vsComputer, 
-      pawns: [0,1,2,3].map(i => ({ id: `green-${i}`, color: 'green', location: -1 })) 
+      pawns: [0,1,2,3].map(i => ({ id: `blue-${i}`, color: 'blue', location: -1 })) 
     },
     { 
       id: 'p3', name: vsComputer ? 'Bot Yellow' : 'Player 3', color: 'yellow', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John', 
@@ -36,9 +37,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
       pawns: [0,1,2,3].map(i => ({ id: `yellow-${i}`, color: 'yellow', location: -1 })) 
     },
     { 
-      id: 'p4', name: vsComputer ? 'Bot Blue' : 'Player 4', color: 'blue', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah', 
+      id: 'p4', name: vsComputer ? 'Bot Green' : 'Player 4', color: 'green', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka', 
       isBot: vsComputer, 
-      pawns: [0,1,2,3].map(i => ({ id: `blue-${i}`, color: 'blue', location: -1 })) 
+      pawns: [0,1,2,3].map(i => ({ id: `green-${i}`, color: 'green', location: -1 })) 
     },
   ]);
 
@@ -52,6 +53,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
   const [isGameOver, setIsGameOver] = useState(false);
   const [turnTimerKey, setTurnTimerKey] = useState(0);
   const [isMovingPawn, setIsMovingPawn] = useState(false);
+  const [pawnCelebration, setPawnCelebration] = useState<{ color: PlayerColor, pawnId: string } | null>(null);
 
   // --- Secret DIY State ---
   const [diyUnlocked, setDiyUnlocked] = useState(false);
@@ -98,14 +100,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
   const handleRoll = useCallback(() => {
     if (isRolling || hasRolled || isGameOver || isMovingPawn || currentPlayer.rank) return;
     setIsRolling(true);
-    if (diyActive) {
+    if (diyActive && !currentPlayer.isBot) {
       setShowDiyPopup(true);
       diySelectedRef.current = null;
     }
-    const rollDuration = diyActive ? 1200 : 600; 
+    const rollDuration = (diyActive && !currentPlayer.isBot) ? 1800 : 600; 
     setTimeout(() => {
       let rolledValue = Math.floor(Math.random() * 6) + 1;
-      if (diyActive) {
+      if (diyActive && !currentPlayer.isBot) {
         setShowDiyPopup(false);
         if (diySelectedRef.current !== null) {
           rolledValue = diySelectedRef.current;
@@ -160,31 +162,32 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
     const stepsToMove = (currentLoc === -1) ? 1 : diceValue;
 
     for (let i = 1; i <= stepsToMove; i++) {
-        const nextLoc = (currentLoc === -1) ? 0 : (currentLoc + i);
+        let nextLoc = (currentLoc === -1) ? 0 : (currentLoc + i);
+        if (nextLoc >= 57) {
+          nextLoc = 99;
+          setPawnLocation(pawnId, nextLoc);
+          break;
+        }
         setPawnLocation(pawnId, nextLoc);
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, MOVE_STEP_DELAY));
     }
 
-    const finalLocation = (currentLoc === -1) ? 0 : (currentLoc + diceValue);
-    
+    let finalLocation = (currentLoc === -1) ? 0 : (currentLoc + diceValue);
+    if (finalLocation >= 57) finalLocation = 99;
+
     setPlayers(prev => {
       const newPlayers = [...prev];
       const currentPlayerIdx = newPlayers.findIndex(p => p.id === player.id);
-      
       if (finalLocation < 51) { 
         const offset = PLAYER_START_OFFSETS[player.color];
         const globalPos = (offset + finalLocation) % 52;
         const isSafe = SAFE_INDICES.includes(globalPos);
-
         if (!isSafe) {
            newPlayers.forEach((opp, oppIdx) => {
               if (opp.id !== player.id && !opp.rank) {
                   opp.pawns.forEach((oppPawn, oppPawnIdx) => {
                       const oppOffset = PLAYER_START_OFFSETS[opp.color];
-                      const oppGlobal = oppPawn.location !== -1 && oppPawn.location < 51 
-                          ? (oppOffset + oppPawn.location) % 52 
-                          : -999;
-                      
+                      const oppGlobal = oppPawn.location !== -1 && oppPawn.location < 51 ? (oppOffset + oppPawn.location) % 52 : -999;
                       if (globalPos === oppGlobal) {
                           newPlayers[oppIdx].pawns[oppPawnIdx].location = -1;
                       }
@@ -193,7 +196,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
            });
         }
       }
-
+      if (finalLocation === 99) {
+         setPawnCelebration({ color: player.color, pawnId: pawnId });
+         setTimeout(() => setPawnCelebration(null), 2500);
+      }
       const hasWonNow = newPlayers[currentPlayerIdx].pawns.every(p => p.location === 99);
       if (hasWonNow && !newPlayers[currentPlayerIdx].rank) {
          const finishedCount = newPlayers.filter(p => p.rank).length;
@@ -243,11 +249,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
       } else if (hasRolled && !isRolling && !isMovingPawn) {
         setTimeout(() => {
           if (validMovePawns.length > 0) {
-            const basePawn = validMovePawns.find(id => {
-                const p = currentPlayer.pawns.find(p => p.id === id);
-                return p?.location === -1;
-            });
-            const moveId = basePawn || validMovePawns[Math.floor(Math.random() * validMovePawns.length)];
+            const moveId = validMovePawns[Math.floor(Math.random() * validMovePawns.length)];
             animateMoveSequence(moveId);
           }
         }, 1000);
@@ -257,6 +259,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-ludo-dark overflow-hidden">
+       {/* DIY Logic Control Overlay */}
+       <AnimatePresence>
+         {showDiyPopup && (
+           <DIYControl onSelect={handleDiySelect} />
+         )}
+       </AnimatePresence>
+
+       {/* Top Bar Header */}
        <div className="flex-none p-3 md:p-4 flex justify-between items-center z-40 bg-ludo-dark/80 backdrop-blur-sm border-b border-white/10">
           <div className="flex items-center gap-2">
              <div className="font-black text-lg md:text-xl tracking-tighter text-white uppercase">Homiies<span className="text-ludo-red">.</span></div>
@@ -280,19 +290,31 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
           </div>
        </div>
 
-       <div className="flex-1 relative flex flex-col lg:flex-row items-center justify-center p-2 md:p-6 gap-2 md:gap-12 overflow-y-auto overflow-x-hidden">
+       {/* Main Content Area */}
+       <div className="flex-1 relative flex flex-col items-center justify-center p-3 md:p-6 overflow-y-auto overflow-x-hidden gap-4 md:gap-8">
+          <AnimatePresence>
+            {pawnCelebration && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.5, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1.5 }}
+                className="absolute z-[100] pointer-events-none flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm p-8 rounded-full border border-white/20 shadow-2xl"
+              >
+                 <Sparkles className="text-ludo-yellow w-12 h-12 mb-2 animate-bounce" />
+                 <div className="font-black text-white text-2xl uppercase tracking-tighter italic">PAWN HOME!</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {isGameOver && (
                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/95 p-6 overflow-y-auto">
                   <Trophy size={48} className="text-ludo-yellow mb-4" />
                   <h2 className="text-3xl md:text-4xl font-black text-white mb-6 md:mb-8 italic uppercase tracking-tighter">Match Ended</h2>
                   <div className="w-full max-w-sm space-y-2">
-                    {players.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((p, index) => (
+                    {players.slice().sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((p) => (
                         <div key={p.id} className={clsx("flex items-center p-3 border border-white/10 gap-4 rounded-xl", p.rank === 1 ? "bg-ludo-yellow/10" : "bg-white/5")}>
                            <div className="font-black text-xl w-6 text-white/50">{p.rank}</div>
                            <div className="w-10 h-10 border border-white/20 rounded-lg overflow-hidden"><img src={p.avatarUrl} className="w-full h-full" /></div>
                            <div className="flex-1 font-bold text-white text-sm uppercase tracking-wider">{p.name}</div>
-                           <div>{p.rank === 1 && <Crown size={16} className="text-ludo-yellow fill-ludo-yellow" />}</div>
                         </div>
                     ))}
                   </div>
@@ -301,36 +323,43 @@ export const GameScreen: React.FC<GameScreenProps> = ({ onExit, vsComputer = fal
             )}
           </AnimatePresence>
 
-          <AnimatePresence>{showDiyPopup && <DIYControl onSelect={handleDiySelect} />}</AnimatePresence>
-
-          {/* Large Screen Left Cards */}
-          <div className="hidden lg:flex flex-col gap-8 justify-center w-56">
-             <PlayerCard player={players[0]} active={turnIndex === 0} timerKey={turnTimerKey} diceValue={diceValue} isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} />
-             <PlayerCard player={players[3]} active={turnIndex === 3} timerKey={turnTimerKey} diceValue={diceValue} isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} />
+          {/* Top Row Players (Red, Blue) */}
+          <div className="flex justify-between w-full max-w-[750px] gap-2 md:gap-8">
+             <PlayerTurnBox 
+               player={players[0]} active={turnIndex === 0} timerKey={turnTimerKey} diceValue={diceValue} 
+               isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} diceSide="right"
+             />
+             <PlayerTurnBox 
+               player={players[1]} active={turnIndex === 1} timerKey={turnTimerKey} diceValue={diceValue} 
+               isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} diceSide="left"
+             />
           </div>
 
-          <div className="flex-shrink-0 w-full max-w-[320px] xs:max-w-[380px] md:max-w-[480px] lg:max-w-[550px] aspect-square relative z-10">
-             <LudoBoard players={players} currentTurn={currentPlayer.color} onPawnClick={handlePawnClick} validMovePawns={validMovePawns} onUnlockSecret={() => setDiyUnlocked(true)} />
+          {/* Center Ludo Board */}
+          <div className="flex-shrink-0 w-full max-w-[280px] xs:max-w-[340px] md:max-w-[460px] aspect-square relative z-10">
+             <LudoBoard 
+               players={players} currentTurn={currentPlayer.color} onPawnClick={handlePawnClick} 
+               validMovePawns={validMovePawns} onUnlockSecret={() => setDiyUnlocked(true)} 
+             />
           </div>
 
-          {/* Large Screen Right Cards */}
-          <div className="hidden lg:flex flex-col gap-8 justify-center w-56">
-             <PlayerCard player={players[1]} active={turnIndex === 1} timerKey={turnTimerKey} diceValue={diceValue} isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} />
-             <PlayerCard player={players[2]} active={turnIndex === 2} timerKey={turnTimerKey} diceValue={diceValue} isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} />
-          </div>
-
-          {/* Medium/Small Screens (Grid below/above board) */}
-          <div className="lg:hidden grid grid-cols-2 md:grid-cols-4 w-full gap-2 max-w-[480px] md:max-w-[800px] mt-2">
-             {players.map((p, idx) => (
-               <PlayerCard key={p.id} player={p} active={turnIndex === idx} timerKey={turnTimerKey} diceValue={diceValue} isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} compact />
-             ))}
+          {/* Bottom Row Players (Green, Yellow) */}
+          <div className="flex justify-between w-full max-w-[750px] gap-2 md:gap-8">
+             <PlayerTurnBox 
+               player={players[3]} active={turnIndex === 3} timerKey={turnTimerKey} diceValue={diceValue} 
+               isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} diceSide="right"
+             />
+             <PlayerTurnBox 
+               player={players[2]} active={turnIndex === 2} timerKey={turnTimerKey} diceValue={diceValue} 
+               isRolling={isRolling} hasRolled={hasRolled} onRoll={handleRoll} diceSide="left"
+             />
           </div>
        </div>
     </div>
   );
 };
 
-interface PlayerCardProps {
+interface PlayerTurnBoxProps {
    player: PlayerState;
    active: boolean;
    timerKey: number;
@@ -338,41 +367,101 @@ interface PlayerCardProps {
    isRolling: boolean;
    hasRolled: boolean;
    onRoll: () => void;
-   compact?: boolean;
+   diceSide: 'left' | 'right';
 }
 
-const PlayerCard: React.FC<PlayerCardProps> = ({ player, active, timerKey, diceValue, isRolling, hasRolled, onRoll, compact }) => {
-  const colorStyles = { red: 'border-ludo-red', green: 'border-ludo-green', blue: 'border-ludo-blue', yellow: 'border-ludo-yellow' };
-  const bgStyles = { red: 'bg-ludo-red', green: 'bg-ludo-green', blue: 'bg-ludo-blue', yellow: 'bg-ludo-yellow' };
+const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, timerKey, diceValue, isRolling, hasRolled, onRoll, diceSide }) => {
+  const colorStyles = { red: 'stroke-ludo-red', green: 'stroke-ludo-green', blue: 'stroke-ludo-blue', yellow: 'stroke-ludo-yellow' };
   const diceColors = { red: '#FF4757', green: '#2ED573', blue: '#1E90FF', yellow: '#FFA502' };
+
+  // Fixed visual box dimensions for the decreasing border timer
+  const cardW = 100;
+  const cardH = 40;
+  const perimeter = (cardW + cardH) * 2;
 
   return (
     <div className={clsx(
-       "relative transition-all duration-300 flex items-center bg-white/5 border-2 rounded-2xl overflow-hidden",
-       active ? `${colorStyles[player.color]} scale-105 z-30 shadow-[0_0_20px_rgba(0,0,0,0.5)]` : "border-white/5 grayscale opacity-50",
-       compact ? "p-2 gap-2 h-14" : "p-3 gap-3 h-24"
+      "flex items-center gap-2 transition-all duration-300",
+      diceSide === 'right' ? 'flex-row' : 'flex-row-reverse'
     )}>
-       <div className={clsx("relative border border-white/20 flex-shrink-0 rounded-xl overflow-hidden", compact ? "w-7 h-7" : "w-12 h-12")}>
-          <img src={player.avatarUrl} className="w-full h-full object-cover" />
-       </div>
-       <div className="flex-1 min-w-0">
-          <div className={clsx("font-black truncate uppercase tracking-tighter leading-none", compact ? "text-[9px]" : "text-sm italic")}>{player.name}</div>
-          <div className="flex gap-1 mt-0.5 md:mt-1 opacity-50">
-             <div className="text-[7px] md:text-[8px] bg-white/10 px-0.5 md:px-1 rounded font-mono uppercase">H:{player.pawns.filter(p=>p.location===-1).length}</div>
-             <div className="text-[7px] md:text-[8px] bg-white/10 px-0.5 md:px-1 rounded font-mono uppercase">W:{player.pawns.filter(p=>p.location===99).length}</div>
+       {/* Compact Profile Card with DECREASING Border Timer */}
+       <div className={clsx(
+          "relative transition-all duration-300 flex items-center bg-white/5 rounded-lg overflow-hidden p-1 gap-2",
+          active ? "scale-105 z-30 shadow-[0_0_20px_rgba(0,0,0,0.5)]" : "grayscale opacity-30",
+       )} style={{ width: cardW, height: cardH }}>
+          
+          {/* Border Timer SVG: Decreasing manner (shrinks as time passes) */}
+          {active && !player.rank && (
+             <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox={`0 0 ${cardW} ${cardH}`}>
+               <motion.rect
+                 key={timerKey}
+                 x="1" y="1" width={cardW - 2} height={cardH - 2}
+                 rx="7" ry="7"
+                 fill="none"
+                 strokeWidth="2.5"
+                 className={colorStyles[player.color]}
+                 strokeDasharray={perimeter}
+                 // Starting offset 0 (full) to perimeter (empty)
+                 initial={{ strokeDashoffset: 0 }}
+                 animate={{ strokeDashoffset: perimeter }}
+                 transition={{ duration: TURN_DURATION / 1000, ease: "linear" }}
+                 strokeLinecap="round"
+               />
+               {/* Static faint background border */}
+               <rect x="1" y="1" width={cardW - 2} height={cardH - 2} rx="7" ry="7" fill="none" strokeWidth="1" className="stroke-white/5" />
+             </svg>
+          )}
+
+          <div className="relative w-6 h-6 border border-white/10 rounded overflow-hidden flex-shrink-0 z-10">
+             <img src={player.avatarUrl} className="w-full h-full object-cover" alt={player.name} />
           </div>
-       </div>
-       {active && !player.rank && (
-         <Dice value={diceValue} rolling={isRolling} onRoll={onRoll} disabled={player.isBot || hasRolled} color={diceColors[player.color]} className={compact ? "w-9 h-9" : "w-14 h-14"} />
-       )}
-       {active && !player.rank && (
-          <motion.div key={timerKey} className={clsx("absolute bottom-0 left-0 h-[2px] z-10", bgStyles[player.color])} initial={{ width: "100%" }} animate={{ width: "0%" }} transition={{ duration: TURN_DURATION / 1000, ease: "linear" }} />
-       )}
-       {player.rank && (
-          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-             <span className="text-ludo-yellow font-black text-lg md:text-xl italic">{player.rank}#</span>
+          <div className="flex-1 overflow-hidden z-10">
+             <div className="font-black truncate uppercase tracking-tighter text-[8px] leading-tight text-white">{player.name}</div>
+             <div className="flex gap-1 mt-0.5 opacity-40">
+                <div className="text-[6px] font-mono">H:{player.pawns.filter(p=>p.location===-1).length}</div>
+                <div className="text-[6px] font-mono">W:{player.pawns.filter(p=>p.location===99).length}</div>
+             </div>
           </div>
-       )}
+          
+          {player.rank && (
+             <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-20">
+                <Hash size={8} className="text-ludo-yellow" />
+                <span className="text-ludo-yellow font-black text-xs italic">{player.rank}</span>
+             </div>
+          )}
+       </div>
+
+       {/* DICE BOX - Dice only appears on respective player's turn */}
+       <div className={clsx(
+         "w-10 h-10 md:w-11 md:h-11 bg-white/[0.03] border border-white/5 rounded-lg flex items-center justify-center relative overflow-hidden transition-all duration-300",
+         active ? "border-white/20 bg-white/10" : "opacity-10"
+       )}>
+          <AnimatePresence mode="wait">
+            {active && !player.rank && (
+              <motion.div 
+                key="active-dice-content"
+                initial={{ opacity: 0, scale: 0.5, rotate: -30 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                className="w-full h-full p-1"
+              >
+                 <Dice 
+                    value={diceValue} 
+                    rolling={isRolling} 
+                    onRoll={onRoll} 
+                    disabled={player.isBot || hasRolled} 
+                    color={diceColors[player.color]} 
+                    className="w-full h-full" 
+                 />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          
+          {/* Subtle placeholder when empty */}
+          {!active && !player.rank && (
+             <div className="w-1.5 h-1.5 bg-white/10 rounded-full animate-pulse" />
+          )}
+       </div>
     </div>
   );
 };

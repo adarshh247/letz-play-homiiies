@@ -65,9 +65,9 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
       onClick={onRoll}
       disabled={disabled || rolling}
       className={clsx(
-        "relative outline-none transition-all rounded-2xl",
+        "relative outline-none transition-all rounded-lg md:rounded-xl",
         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95",
-        className || "w-14 h-14"
+        className || "w-10 h-10 md:w-14 md:h-14"
       )}
     >
       <AnimatePresence>
@@ -76,7 +76,7 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
             initial={{ scale: 0.8, opacity: 1 }}
             animate={{ scale: 1.5, opacity: 0 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-white/40 rounded-2xl blur-md -z-10"
+            className="absolute inset-0 bg-white/40 rounded-lg blur-md -z-10"
           />
         )}
       </AnimatePresence>
@@ -85,23 +85,23 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
         animate={rolling ? { 
           rotateX: [0, 360, 720, 1080], 
           rotateY: [0, 360, 720, 1080], 
-          y: [-10, 0, -10, 0],
-          scale: [1, 1.2, 0.9, 1.1, 1]
+          y: [-5, 0, -5, 0],
+          scale: [1, 1.1, 0.9, 1.05, 1]
         } : showImpact ? {
-          x: [0, -4, 4, -2, 2, 0],
-          y: [0, 4, -4, 2, -2, 0],
+          x: [0, -2, 2, -1, 1, 0],
+          y: [0, 2, -2, 1, -1, 0],
           scale: [1.1, 1]
         } : { rotateX: 0, rotateY: 0, scale: 1, x: 0, y: 0 }}
-        transition={rolling ? { duration: 1, repeat: Infinity, ease: "linear" } : { duration: 0.4 }}
-        className="w-full h-full bg-white relative flex items-center justify-center rounded-2xl border-2 border-black/10 shadow-lg preserve-3d"
+        transition={rolling ? { duration: 0.8, repeat: Infinity, ease: "linear" } : { duration: 0.4 }}
+        className="w-full h-full bg-white relative flex items-center justify-center rounded-lg md:rounded-xl border border-black/10 shadow-lg preserve-3d"
       >
-        <div className="w-full h-full p-2.5 grid grid-cols-3 grid-rows-3 gap-1">
+        <div className="w-full h-full p-1.5 md:p-2 grid grid-cols-3 grid-rows-3 gap-0.5 md:gap-1">
           {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
             <div key={idx} className="flex items-center justify-center">
               {dots[displayValue]?.includes(idx) && (
                 <motion.div 
                   layoutId={`dot-${idx}`}
-                  className="w-2 h-2 rounded-full" 
+                  className="w-[85%] h-[85%] rounded-full shadow-inner" 
                   style={{ backgroundColor: color }} 
                 />
               )}

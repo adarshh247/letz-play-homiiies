@@ -1,5 +1,6 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+
+import React, { useEffect, useState } from 'react';
+import { motion, useAnimation } from 'framer-motion';
 import { PlayerColor } from '../../types';
 import { clsx } from 'clsx';
 
@@ -13,6 +14,9 @@ interface PawnProps {
 }
 
 export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pulse, size = 'normal' }) => {
+  const controls = useAnimation();
+  const [prevLocation, setPrevLocation] = useState<string | null>(null);
+
   const getColors = (c: PlayerColor) => {
     switch (c) {
       case 'red': return { body: '#FF4757', light: '#ff6b81', dark: '#c41d2f' };
@@ -24,25 +28,43 @@ export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pul
 
   const theme = getColors(color);
 
+  // Trigger a jump animation when the pawn moves (handled by layout changes)
+  // LayoutId automatically animates between positions. We add a scale and y-offset for extra "juice".
+
   return (
     <motion.div
       layoutId={`pawn-${id}`}
       onClick={isClickable ? onClick : undefined}
       initial={false}
-      animate={{ scale: isClickable ? 1.1 : 1 }}
+      animate={{ 
+        scale: isClickable ? 1.15 : 1,
+        y: isClickable ? -4 : 0
+      }}
       transition={{ 
         type: "spring", 
-        stiffness: 300, 
+        stiffness: 400, 
         damping: 25,
-        mass: 1
+        mass: 0.8,
+        layout: { duration: 0.25, type: "spring", stiffness: 350, damping: 20 }
       }}
       className={clsx(
-        "relative flex items-center justify-center transition-all duration-200",
+        "relative flex items-center justify-center",
         size === 'small' ? "w-[80%] h-[80%] -mb-[10%] z-10" : "w-[140%] h-[140%] -mb-[30%] z-20",
-        isClickable ? "cursor-pointer z-50 drop-shadow-[0_0_8px_rgba(255,255,255,0.6)]" : "cursor-default drop-shadow-md",
+        isClickable ? "cursor-pointer z-50 drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]" : "cursor-default drop-shadow-md",
       )}
     >
-      {/* SVG Cone Shape */}
+      <AnimatePresence>
+        {pulse && isClickable && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1.5 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-white/40 blur-xl rounded-full -z-10"
+            transition={{ repeat: Infinity, duration: 1.5, ease: "easeOut" }}
+          />
+        )}
+      </AnimatePresence>
+
       <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-xl overflow-visible">
          <defs>
            <radialGradient id={`grad-head-${id}`} cx="30%" cy="30%" r="70%">
@@ -56,21 +78,21 @@ export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pul
            </linearGradient>
          </defs>
 
-         {/* Selection Ring */}
+         {/* Selection Glow for clickable pawns */}
          {isClickable && (
            <motion.ellipse 
-             cx="50" cy="110" rx="40" ry="10" 
+             cx="50" cy="110" rx="35" ry="10" 
              fill="none" 
              stroke="white" 
-             strokeWidth="4"
-             initial={{ opacity: 0, rx: 20 }}
-             animate={{ opacity: [1, 0], rx: 50, ry: 15 }}
-             transition={{ duration: 1, repeat: Infinity }}
+             strokeWidth="2"
+             initial={{ opacity: 0, scale: 0.8 }}
+             animate={{ opacity: [0.5, 0], scale: 1.8 }}
+             transition={{ duration: 1.2, repeat: Infinity }}
            />
          )}
 
-         {/* Shadow Base */}
-         <ellipse cx="50" cy="105" rx="35" ry="12" fill="rgba(0,0,0,0.4)" />
+         {/* Base Shadow */}
+         <ellipse cx="50" cy="108" rx="35" ry="12" fill="rgba(0,0,0,0.35)" />
 
          {/* Cone Body */}
          <path 
@@ -83,14 +105,11 @@ export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pul
          {/* Head */}
          <circle cx="50" cy="25" r="20" fill={`url(#grad-head-${id})`} stroke={theme.dark} strokeWidth="1" />
          
-         {/* Highlight on Head */}
-         <circle cx="40" cy="18" r="6" fill="rgba(255,255,255,0.6)" filter="blur(2px)" />
+         {/* Shiny Highlight */}
+         <circle cx="42" cy="18" r="6" fill="rgba(255,255,255,0.7)" filter="blur(2px)" />
       </svg>
-      
-      {/* Pulsing Aura for active turn */}
-      {pulse && isClickable && (
-         <div className="absolute inset-0 bg-white/20 blur-xl rounded-full animate-pulse -z-10" />
-      )}
     </motion.div>
   );
 };
+
+import { AnimatePresence } from 'framer-motion';
