@@ -12,7 +12,9 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  pingTimeout: 10000,
+  pingInterval: 5000
 });
 
 const rooms = new Map();
@@ -51,9 +53,9 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Check if user already in room
-    const exists = room.participants.some(p => p.id === user.id);
-    if (!exists) {
+    // Use user ID to check if already in room, update socket ID if they reconnected
+    const existingIndex = room.participants.findIndex(p => p.id === user.id);
+    if (existingIndex === -1) {
         const participant = {
           id: user.id,
           name: user.name,
@@ -63,9 +65,12 @@ io.on('connection', (socket) => {
           socketId: socket.id
         };
         room.participants.push(participant);
+    } else {
+        room.participants[existingIndex].socketId = socket.id;
     }
     
     socket.join(roomCode);
+    // Broadcast to EVERYONE in the room including the joiner
     io.to(roomCode).emit('room_updated', room);
     console.log(`${user.name} joined room: ${roomCode}`);
   });
@@ -75,7 +80,7 @@ io.on('connection', (socket) => {
     if (room && room.participants.length === 4) {
       io.to(roomCode).emit('game_started');
     } else if (room) {
-      socket.emit('error', 'Need 4 players to start.');
+      socket.emit('error', 'Exactly 4 players required to start Homiies.');
     }
   });
 
@@ -93,7 +98,6 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
-    // Cleanup rooms
     rooms.forEach((room, code) => {
       const index = room.participants.findIndex(p => p.socketId === socket.id);
       if (index !== -1) {
@@ -101,8 +105,7 @@ io.on('connection', (socket) => {
         if (room.participants.length === 0) {
           rooms.delete(code);
         } else {
-          // If host left, assign new host
-          if (index === 0) {
+          if (index === 0 && room.participants.length > 0) {
             room.hostId = room.participants[0].id;
             room.participants[0].isHost = true;
           }

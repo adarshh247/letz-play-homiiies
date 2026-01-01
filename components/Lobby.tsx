@@ -29,6 +29,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   onSimulateRoom
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const [showTimeoutFallback, setShowTimeoutFallback] = useState(false);
 
   useEffect(() => {
@@ -36,9 +37,10 @@ export const Lobby: React.FC<LobbyProps> = ({
     if (view === ViewState.CREATE_ROOM && !currentRoom) {
       timer = setTimeout(() => {
         setShowTimeoutFallback(true);
-      }, 8000);
+      }, 10000);
     } else {
       setShowTimeoutFallback(false);
+      setIsJoining(false);
     }
     return () => clearTimeout(timer);
   }, [view, currentRoom]);
@@ -51,8 +53,14 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   const isHost = currentRoom?.hostId === userId;
   const participantCount = currentRoom?.participants.length || 0;
-  // Requirement: exactly 4 players must be joined to click the button in multiplayer
+  // Requirement: exactly 4 players must be joined to start
   const canStart = participantCount === 4;
+
+  const handleJoin = () => {
+    if (!joinCodeInput.trim()) return;
+    setIsJoining(true);
+    onJoinRoom(joinCodeInput.trim());
+  };
 
   return (
     <div className="relative z-10 flex flex-col items-center justify-start md:justify-center h-full w-full px-6 py-12 overflow-y-auto pointer-events-auto">
@@ -169,11 +177,14 @@ export const Lobby: React.FC<LobbyProps> = ({
                  <label className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em]">Protocol Key</label>
                  <input 
                   type="text" value={joinCodeInput} onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                  placeholder="HM-XXXX" maxLength={6} className="w-full bg-black/40 border border-white/10 p-4 text-xl font-black text-white outline-none focus:border-ludo-red text-center tracking-[0.3em] font-mono"
+                  placeholder="HM-XXXX" maxLength={10} className="w-full bg-black/40 border border-white/10 p-4 text-xl font-black text-white outline-none focus:border-ludo-red text-center tracking-[0.3em] font-mono"
+                  disabled={isJoining}
                  />
                </div>
-               <SharpButton variant="primary" onClick={() => onJoinRoom(joinCodeInput)} disabled={joinCodeInput.length < 1}>JOIN</SharpButton>
-               <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)}>Back</SharpButton>
+               <SharpButton variant="primary" onClick={handleJoin} disabled={joinCodeInput.length < 1 || isJoining}>
+                 {isJoining ? <Loader2 size={16} className="animate-spin" /> : "JOIN"}
+               </SharpButton>
+               <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} disabled={isJoining}>Back</SharpButton>
             </motion.div>
           )}
         </AnimatePresence>
