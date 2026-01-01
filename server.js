@@ -43,7 +43,7 @@ io.on('connection', (socket) => {
   socket.on('join_room', ({ user, roomCode }) => {
     const room = rooms.get(roomCode);
     if (!room) {
-      socket.emit('error', 'Room not found');
+      socket.emit('error', 'Room not found. Check the host code.');
       return;
     }
     if (room.participants.length >= 4) {
@@ -51,16 +51,20 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const participant = {
-      id: user.id,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      isHost: false,
-      isReady: true,
-      socketId: socket.id
-    };
+    // Check if user already in room
+    const exists = room.participants.some(p => p.id === user.id);
+    if (!exists) {
+        const participant = {
+          id: user.id,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          isHost: false,
+          isReady: true,
+          socketId: socket.id
+        };
+        room.participants.push(participant);
+    }
     
-    room.participants.push(participant);
     socket.join(roomCode);
     io.to(roomCode).emit('room_updated', room);
     console.log(`${user.name} joined room: ${roomCode}`);
@@ -68,8 +72,10 @@ io.on('connection', (socket) => {
 
   socket.on('start_game', (roomCode) => {
     const room = rooms.get(roomCode);
-    if (room && room.participants.length >= 2) {
+    if (room && room.participants.length === 4) {
       io.to(roomCode).emit('game_started');
+    } else if (room) {
+      socket.emit('error', 'Need 4 players to start.');
     }
   });
 

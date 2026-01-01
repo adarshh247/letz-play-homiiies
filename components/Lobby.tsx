@@ -36,7 +36,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     if (view === ViewState.CREATE_ROOM && !currentRoom) {
       timer = setTimeout(() => {
         setShowTimeoutFallback(true);
-      }, 5000);
+      }, 8000);
     } else {
       setShowTimeoutFallback(false);
     }
@@ -51,10 +51,8 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   const isHost = currentRoom?.hostId === userId;
   const participantCount = currentRoom?.participants.length || 0;
-  // Requirement: Min 2 players to start, Max 4. 
-  // User requested "until all are joined", usually implying the 4 slots or a quorum.
-  // We'll require at least 2 but show the 4 slots.
-  const canStart = participantCount >= 2;
+  // Requirement: exactly 4 players must be joined to click the button in multiplayer
+  const canStart = participantCount === 4;
 
   return (
     <div className="relative z-10 flex flex-col items-center justify-start md:justify-center h-full w-full px-6 py-12 overflow-y-auto pointer-events-auto">
@@ -95,7 +93,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                  <>
                   <div className="text-center py-2 border-b border-white/5">
                       <span className="text-[9px] text-white/30 uppercase font-black tracking-widest mb-1 block">Room Protocol Code</span>
-                      <div className="text-2xl font-black text-ludo-red tracking-[0.3em] font-mono">{currentRoom.code}</div>
+                      <div className="text-2xl font-black text-ludo-red tracking-[0.3em] font-mono select-all cursor-copy" title="Click to copy">{currentRoom.code}</div>
                   </div>
                   
                   <div className="py-2 space-y-2">
@@ -127,12 +125,13 @@ export const Lobby: React.FC<LobbyProps> = ({
                   <div className="flex flex-col gap-2 pt-2">
                       {isHost ? (
                         <SharpButton 
-                          variant={canStart ? "primary" : "outline"} 
+                          variant={canStart ? "accent" : "outline"} 
                           disabled={!canStart} 
                           onClick={onStartGame} 
                           icon={<Play size={16} />}
+                          className="h-14"
                         >
-                          {canStart ? "Start Match" : `Waiting (${participantCount}/2)`}
+                          {canStart ? "LETS PLAY HOMIIES" : `Waiting for Homiies (${participantCount}/4)`}
                         </SharpButton>
                       ) : (
                         <div className="p-3 bg-white/5 text-center text-[9px] font-black text-white/40 uppercase tracking-[0.3em] animate-pulse">Awaiting Host...</div>
@@ -155,7 +154,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                       <>
                         <WifiOff size={24} className="text-ludo-red mb-2" />
                         <p className="text-[10px] font-black text-ludo-red uppercase tracking-[0.3em] text-center">Connection Timeout</p>
-                        <SharpButton variant="primary" onClick={onSimulateRoom} className="w-full h-10 text-[9px] mt-4">Manual Initialization</SharpButton>
+                        <SharpButton variant="primary" onClick={onSimulateRoom} className="w-full h-10 text-[9px] mt-4">Retry Protocol</SharpButton>
                         <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} className="w-full h-10 text-[9px]">Cancel</SharpButton>
                       </>
                     )}
@@ -173,7 +172,7 @@ export const Lobby: React.FC<LobbyProps> = ({
                   placeholder="HM-XXXX" maxLength={6} className="w-full bg-black/40 border border-white/10 p-4 text-xl font-black text-white outline-none focus:border-ludo-red text-center tracking-[0.3em] font-mono"
                  />
                </div>
-               <SharpButton variant="primary" onClick={() => onJoinRoom(joinCodeInput)} disabled={joinCodeInput.length < 6}>Establish Link</SharpButton>
+               <SharpButton variant="primary" onClick={() => onJoinRoom(joinCodeInput)} disabled={joinCodeInput.length < 1}>JOIN</SharpButton>
                <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)}>Back</SharpButton>
             </motion.div>
           )}

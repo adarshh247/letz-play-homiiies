@@ -23,10 +23,10 @@ const DEFAULT_STATS: UserStats = {
   tournamentsWon: 0
 };
 
-// In many preview environments, the backend runs on the same host but different port
-const SOCKET_URL = window.location.hostname === 'localhost' 
+// Robust socket URL detection
+const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000' 
-  : `https://${window.location.hostname.replace('3000', '')}:3000`;
+  : `${window.location.protocol}//${window.location.hostname}:3000`;
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>(ViewState.AUTH);
@@ -46,19 +46,18 @@ const App: React.FC = () => {
 
   // Socket Connection Initialization
   useEffect(() => {
+    // We only connect once we have a user to identify the session
+    if (!user) return;
+
     socketRef.current = io(SOCKET_URL, {
-      reconnectionAttempts: 5,
-      timeout: 5000,
+      reconnectionAttempts: 10,
+      timeout: 10000,
       transports: ['websocket', 'polling']
     });
     
     socketRef.current.on('connect', () => {
-      console.log('Connected to Homiies Server');
+      console.log('Connected to Homiies Server as', user.name);
       setSocketConnected(true);
-      // Re-sync if we were already in a room locally
-      if (currentRoom && user) {
-        socketRef.current?.emit('create_room', { user, roomCode: currentRoom.code });
-      }
     });
 
     socketRef.current.on('disconnect', () => {
@@ -66,7 +65,10 @@ const App: React.FC = () => {
     });
 
     socketRef.current.on('room_updated', (room: Room) => {
+      console.log('Room synced:', room);
       setCurrentRoom(room);
+      // Ensure we are in the lobby view if we just joined or updated
+      setView(ViewState.CREATE_ROOM);
     });
 
     socketRef.current.on('game_started', () => {
@@ -75,12 +77,13 @@ const App: React.FC = () => {
 
     socketRef.current.on('error', (msg: string) => {
       console.error('Socket Error:', msg);
+      alert(msg);
     });
 
     return () => {
       socketRef.current?.disconnect();
     };
-  }, [user]); // Re-init socket if user changes to ensure correct ID
+  }, [user?.id]); // Only re-init if the user ID actually changes
 
   // Auth & Profile Logic
   useEffect(() => {
@@ -133,47 +136,35 @@ const App: React.FC = () => {
     if (!user) return;
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
-    // 1. Set state LOCALLY immediately for instant UI
-    const localRoom: Room = {
-      code: roomCode,
-      hostId: user.id,
-      participants: [{
-        id: user.id,
-        name: user.name,
-        avatarUrl: user.avatarUrl,
-        isHost: true,
-        isReady: true
-      }]
-    };
-    setCurrentRoom(localRoom);
-    setView(ViewState.CREATE_ROOM);
     setGameMode('FRIEND');
 
-    // 2. Notify server in background if connected
     if (socketConnected && socketRef.current) {
       socketRef.current.emit('create_room', { user, roomCode });
+    } else {
+      // Offline simulation fallback
+      const localRoom: Room = {
+        code: roomCode,
+        hostId: user.id,
+        participants: [{
+          id: user.id,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          isHost: true,
+          isReady: true
+        }]
+      };
+      setCurrentRoom(localRoom);
+      setView(ViewState.CREATE_ROOM);
     }
   };
 
   const handleJoinRoom = (roomCode: string) => {
     if (!user) return;
     
-    // For joining, we must try to connect to server first
     if (socketConnected && socketRef.current) {
       socketRef.current.emit('join_room', { user, roomCode });
-      setView(ViewState.CREATE_ROOM);
     } else {
-      // Fallback for simulation/testing
-      const simulatedRoom: Room = {
-        code: roomCode,
-        hostId: 'system',
-        participants: [
-          { id: 'system', name: 'Host Homiie', avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Host', isHost: true, isReady: true },
-          { id: user.id, name: user.name, avatarUrl: user.avatarUrl, isHost: false, isReady: true }
-        ]
-      };
-      setCurrentRoom(simulatedRoom);
-      setView(ViewState.CREATE_ROOM);
+      alert("Multiplayer server unreachable. Connect to the same network as the host.");
     }
   };
 
@@ -199,7 +190,6 @@ const App: React.FC = () => {
 
   const syncProfile = (updates: Partial<User>) => {
     setUser(prev => prev ? { ...prev, ...updates } : null);
-    // Silent background sync
     if (user) supabase.from('profiles').update(updates).eq('id', user.id);
   };
 

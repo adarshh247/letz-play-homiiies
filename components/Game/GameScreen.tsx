@@ -69,7 +69,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     });
   });
 
-  // Use ref to keep track of current players for socket callbacks without triggering re-renders of the effect
   const playersRef = useRef(players);
   useEffect(() => { playersRef.current = players; }, [players]);
 
@@ -85,6 +84,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
   const currentPlayer = players[turnIndex];
   const isMyTurn = currentPlayer?.id === user.id;
 
+  const resetRollingState = useCallback(() => {
+    setIsRolling(false);
+    setHasRolled(false);
+    setValidMovePawns([]);
+    setIsMovingPawn(false);
+  }, []);
+
   const nextTurnLocal = useCallback(() => {
     let nextIdx = (turnIndex + 1) % 4;
     let loopLimit = 0;
@@ -94,11 +100,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     }
     
     setTurnIndex(nextIdx);
-    setHasRolled(false);
-    setValidMovePawns([]);
-    setIsMovingPawn(false);
-    setIsRolling(false); // Safety reset
-  }, [turnIndex, players]);
+    resetRollingState();
+  }, [turnIndex, players, resetRollingState]);
 
   const handleNextTurn = useCallback(() => {
     if (vsComputer) {
@@ -116,14 +119,16 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     if (!socket || !roomCode || vsComputer) return;
 
     const onSyncDice = ({ value, playerIndex }: any) => {
+      console.log('Dice synced:', value, 'for player', playerIndex);
       setDiceValue(value);
-      setIsRolling(false); // Stop dice animation
+      setIsRolling(false); 
       setHasRolled(true);
       
       const currentPlayers = playersRef.current;
       const player = currentPlayers[playerIndex];
+      if (!player) return;
+
       const moves: string[] = [];
-      
       player.pawns.forEach(pawn => {
         if (isValidMove(pawn.location, value)) moves.push(pawn.id);
       });
@@ -139,11 +144,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     };
 
     const onSyncTurn = (nextIdx: number) => {
+      console.log('Turn synced to:', nextIdx);
       setTurnIndex(nextIdx);
-      setHasRolled(false);
-      setValidMovePawns([]);
-      setIsMovingPawn(false);
-      setIsRolling(false); // Double check stop
+      resetRollingState();
     };
 
     socket.on('sync_dice', onSyncDice);
@@ -155,7 +158,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
       socket.off('sync_move', onSyncMove);
       socket.off('sync_turn', onSyncTurn);
     };
-  }, [socket, roomCode, vsComputer, handleNextTurn, user.id]);
+  }, [socket, roomCode, vsComputer, handleNextTurn, user.id, resetRollingState]);
 
   const handleRoll = () => {
     if (isRolling || hasRolled || isMovingPawn) return;
@@ -163,15 +166,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     
     setIsRolling(true);
     
-    // Safety timeout: If socket fails to return, stop the dice after 2s anyway
-    const safetyTimeout = setTimeout(() => {
-        if (isRolling) setIsRolling(false);
-    }, 2000);
+    // Hard limit stop for UI safety
+    const safetyTimer = setTimeout(() => {
+        setIsRolling(false);
+    }, 2500);
 
     setTimeout(() => {
       const val = Math.floor(Math.random() * 6) + 1;
       if (vsComputer) {
-        clearTimeout(safetyTimeout);
+        clearTimeout(safetyTimer);
         setDiceValue(val);
         setIsRolling(false);
         setHasRolled(true);
@@ -183,8 +186,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
         if (moves.length === 0) setTimeout(handleNextTurn, 1000);
       } else {
         socket?.emit('dice_rolled', { roomCode, value: val, playerIndex: turnIndex });
+        clearTimeout(safetyTimer);
       }
-    }, 600);
+    }, 800);
   };
 
   const syncMoveExternally = async (pawnId: string, finalLocation: number, playerIdx: number) => {
@@ -227,15 +231,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
       syncMoveExternally(pawnId, finalLoc, turnIndex);
     } else {
       socket?.emit('move_pawn', { roomCode, pawnId, finalLocation: finalLoc, playerIndex: turnIndex });
-      // In multiplayer, sync_turn will reset the rolled state
     }
   };
 
-  // Bot Automation for Computer Mode
   useEffect(() => {
     if (vsComputer && currentPlayer.isBot && !isGameOver && !isMovingPawn) {
       if (!isRolling && !hasRolled) {
-        setTimeout(handleRoll, 1000);
+        setTimeout(handleRoll, 1500);
       } else if (hasRolled) {
         setTimeout(() => {
           if (validMovePawns.length > 0) {
@@ -259,8 +261,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
        <div className="flex-1 relative flex flex-col items-center justify-center p-6 gap-8">
           <AnimatePresence>
             {pawnCelebration && (
-              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute z-[100] bg-black/60 p-8 rounded-full border border-white/20">
-                 <Sparkles className="text-ludo-yellow w-12 h-12 mb-2 animate-bounce" />
+              <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="absolute z-[100] bg-black/60 p-8 rounded-full border border-white/20 text-center">
+                 <Sparkles className="text-ludo-yellow w-12 h-12 mx-auto mb-2 animate-bounce" />
                  <div className="font-black text-white text-2xl uppercase italic">PAWN HOME!</div>
               </motion.div>
             )}
