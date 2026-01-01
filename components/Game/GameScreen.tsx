@@ -6,8 +6,8 @@ import { LudoBoard } from './LudoBoard';
 import { Dice } from './Dice';
 import { SharpButton } from '../ui/SharpButton';
 import { PlayerState, PlayerColor, User, RoomParticipant } from '../../types';
-import { isValidMove, SAFE_INDICES, PLAYER_START_OFFSETS } from './gameUtils';
-import { X, Trophy, Sparkles, Hash } from 'lucide-react';
+import { isValidMove } from './gameUtils';
+import { X, Sparkles } from 'lucide-react';
 import { Socket } from 'socket.io-client';
 
 interface GameScreenProps {
@@ -19,14 +19,10 @@ interface GameScreenProps {
   socket?: Socket | null;
 }
 
-const TURN_DURATION = 15000;
-const MOVE_STEP_DELAY = 180;
-
 export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer = false, participants, roomCode, socket }) => {
   const [players, setPlayers] = useState<PlayerState[]>(() => {
     const colors: PlayerColor[] = ['red', 'blue', 'yellow', 'green'];
     
-    // Case A: Multiplayer Room Initialization
     if (participants && participants.length > 0) {
       return colors.map((color, index) => {
         const p = participants[index];
@@ -40,7 +36,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
             pawns: [0, 1, 2, 3].map(i => ({ id: `${color}-${i}`, color, location: -1 }))
           };
         }
-        // Fill empty slots with bots
         return {
           id: `bot-${color}`,
           name: `Bot ${color.toUpperCase()}`,
@@ -52,7 +47,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
       });
     }
 
-    // Case B: Solo vs AI / Local initialization
     return colors.map((color, index) => {
       if (index === 0) {
         return {
@@ -75,6 +69,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     });
   });
 
+  // Use ref to keep track of current players for socket callbacks without triggering re-renders of the effect
+  const playersRef = useRef(players);
+  useEffect(() => { playersRef.current = players; }, [players]);
+
   const [turnIndex, setTurnIndex] = useState(0);
   const [diceValue, setDiceValue] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
@@ -87,7 +85,6 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
   const currentPlayer = players[turnIndex];
   const isMyTurn = currentPlayer?.id === user.id;
 
-  // Local/AI Next Turn Logic
   const nextTurnLocal = useCallback(() => {
     let nextIdx = (turnIndex + 1) % 4;
     let loopLimit = 0;
@@ -100,45 +97,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     setHasRolled(false);
     setValidMovePawns([]);
     setIsMovingPawn(false);
+    setIsRolling(false); // Safety reset
   }, [turnIndex, players]);
 
-  // Socket Synchronization
-  useEffect(() => {
-    if (!socket || !roomCode || vsComputer) return;
-
-    socket.on('sync_dice', ({ value, playerIndex }) => {
-      setDiceValue(value);
-      setIsRolling(false);
-      setHasRolled(true);
-      const moves: string[] = [];
-      players[playerIndex].pawns.forEach(pawn => {
-        if (isValidMove(pawn.location, value)) moves.push(pawn.id);
-      });
-      setValidMovePawns(moves);
-      if (moves.length === 0) {
-        setTimeout(handleNextTurn, 1000);
-      }
-    });
-
-    socket.on('sync_move', ({ pawnId, finalLocation, playerIndex }) => {
-      syncMoveExternally(pawnId, finalLocation, playerIndex);
-    });
-
-    socket.on('sync_turn', (nextIdx) => {
-      setTurnIndex(nextIdx);
-      setHasRolled(false);
-      setValidMovePawns([]);
-      setIsMovingPawn(false);
-    });
-
-    return () => {
-      socket.off('sync_dice');
-      socket.off('sync_move');
-      socket.off('sync_turn');
-    };
-  }, [socket, roomCode, players, turnIndex, vsComputer]);
-
-  const handleNextTurn = () => {
+  const handleNextTurn = useCallback(() => {
     if (vsComputer) {
       nextTurnLocal();
       return;
@@ -147,16 +109,69 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     let nextIdx = (turnIndex + 1) % 4;
     while (players[nextIdx].rank) nextIdx = (nextIdx + 1) % 4;
     socket.emit('next_turn', { roomCode, nextIndex: nextIdx });
-  };
+  }, [vsComputer, nextTurnLocal, socket, roomCode, isMyTurn, turnIndex, players]);
+
+  // Socket Synchronization
+  useEffect(() => {
+    if (!socket || !roomCode || vsComputer) return;
+
+    const onSyncDice = ({ value, playerIndex }: any) => {
+      setDiceValue(value);
+      setIsRolling(false); // Stop dice animation
+      setHasRolled(true);
+      
+      const currentPlayers = playersRef.current;
+      const player = currentPlayers[playerIndex];
+      const moves: string[] = [];
+      
+      player.pawns.forEach(pawn => {
+        if (isValidMove(pawn.location, value)) moves.push(pawn.id);
+      });
+      
+      setValidMovePawns(moves);
+      if (moves.length === 0 && player.id === user.id) {
+        setTimeout(handleNextTurn, 1000);
+      }
+    };
+
+    const onSyncMove = ({ pawnId, finalLocation, playerIndex }: any) => {
+      syncMoveExternally(pawnId, finalLocation, playerIndex);
+    };
+
+    const onSyncTurn = (nextIdx: number) => {
+      setTurnIndex(nextIdx);
+      setHasRolled(false);
+      setValidMovePawns([]);
+      setIsMovingPawn(false);
+      setIsRolling(false); // Double check stop
+    };
+
+    socket.on('sync_dice', onSyncDice);
+    socket.on('sync_move', onSyncMove);
+    socket.on('sync_turn', onSyncTurn);
+
+    return () => {
+      socket.off('sync_dice', onSyncDice);
+      socket.off('sync_move', onSyncMove);
+      socket.off('sync_turn', onSyncTurn);
+    };
+  }, [socket, roomCode, vsComputer, handleNextTurn, user.id]);
 
   const handleRoll = () => {
     if (isRolling || hasRolled || isMovingPawn) return;
     if (!vsComputer && !isMyTurn) return;
     
     setIsRolling(true);
+    
+    // Safety timeout: If socket fails to return, stop the dice after 2s anyway
+    const safetyTimeout = setTimeout(() => {
+        if (isRolling) setIsRolling(false);
+    }, 2000);
+
     setTimeout(() => {
       const val = Math.floor(Math.random() * 6) + 1;
       if (vsComputer) {
+        clearTimeout(safetyTimeout);
         setDiceValue(val);
         setIsRolling(false);
         setHasRolled(true);
@@ -174,9 +189,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
 
   const syncMoveExternally = async (pawnId: string, finalLocation: number, playerIdx: number) => {
     setIsMovingPawn(true);
-    const player = players[playerIdx];
-    const pawn = player.pawns.find(p => p.id === pawnId);
-    if (!pawn) return;
+    const player = playersRef.current[playerIdx];
+    const pawn = player?.pawns.find(p => p.id === pawnId);
+    if (!pawn) {
+      setIsMovingPawn(false);
+      return;
+    }
 
     setPlayers(prev => prev.map((p, idx) => {
       if (idx !== playerIdx) return p;
@@ -209,7 +227,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
       syncMoveExternally(pawnId, finalLoc, turnIndex);
     } else {
       socket?.emit('move_pawn', { roomCode, pawnId, finalLocation: finalLoc, playerIndex: turnIndex });
-      setTimeout(handleNextTurn, 1000);
+      // In multiplayer, sync_turn will reset the rolled state
     }
   };
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, ShieldAlert, UserPlus, Shield, Loader2, WifiOff } from 'lucide-react';
+import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, Shield, Loader2, WifiOff } from 'lucide-react';
 import { SharpButton } from './ui/SharpButton';
 import { ViewState, Room } from '../types';
 
@@ -31,13 +31,12 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [showTimeoutFallback, setShowTimeoutFallback] = useState(false);
 
-  // Monitor room creation timeout
   useEffect(() => {
     let timer: any;
     if (view === ViewState.CREATE_ROOM && !currentRoom) {
       timer = setTimeout(() => {
         setShowTimeoutFallback(true);
-      }, 4000);
+      }, 5000);
     } else {
       setShowTimeoutFallback(false);
     }
@@ -46,27 +45,23 @@ export const Lobby: React.FC<LobbyProps> = ({
 
   const containerVariants = {
     hidden: { opacity: 0, y: 10 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: { staggerChildren: 0.05, delayChildren: 0.1 } 
-    },
+    visible: { opacity: 1, y: 0, transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
     exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
   };
 
   const isHost = currentRoom?.hostId === userId;
   const participantCount = currentRoom?.participants.length || 0;
-  const isRoomFull = participantCount >= 2; // Support 2-4 players
+  // Requirement: Min 2 players to start, Max 4. 
+  // User requested "until all are joined", usually implying the 4 slots or a quorum.
+  // We'll require at least 2 but show the 4 slots.
+  const canStart = participantCount >= 2;
 
   return (
     <div className="relative z-10 flex flex-col items-center justify-start md:justify-center h-full w-full px-6 py-12 overflow-y-auto pointer-events-auto">
       <div className="mb-8 md:mb-12 text-center mt-20 md:mt-0">
         <AnimatePresence mode="wait">
           <motion.h1 
-            key={view}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.1 }}
+            key={view} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}
             className="text-3xl md:text-5xl lg:text-6xl font-black text-white uppercase tracking-[-0.05em] italic"
           >
             {view === ViewState.CREATE_ROOM ? "Match Lobby" : "Play Homiies"}
@@ -131,43 +126,37 @@ export const Lobby: React.FC<LobbyProps> = ({
 
                   <div className="flex flex-col gap-2 pt-2">
                       {isHost ? (
-                        <SharpButton variant={isRoomFull ? "primary" : "outline"} disabled={!isRoomFull && socketConnected} onClick={onStartGame} icon={<Play size={16} />}>
-                          {isRoomFull ? "Start Match" : "Waiting for Homiies..."}
+                        <SharpButton 
+                          variant={canStart ? "primary" : "outline"} 
+                          disabled={!canStart} 
+                          onClick={onStartGame} 
+                          icon={<Play size={16} />}
+                        >
+                          {canStart ? "Start Match" : `Waiting (${participantCount}/2)`}
                         </SharpButton>
                       ) : (
                         <div className="p-3 bg-white/5 text-center text-[9px] font-black text-white/40 uppercase tracking-[0.3em] animate-pulse">Awaiting Host...</div>
                       )}
-                      <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)}>Abandon Room</SharpButton>
+                      <SharpButton variant="ghost" onClick={() => { setView(ViewState.FRIEND_OPTIONS); }}>Abandon Room</SharpButton>
                   </div>
                  </>
                ) : (
                  <div className="py-12 flex flex-col items-center justify-center gap-4 min-h-[300px]">
                     {!showTimeoutFallback ? (
                       <>
-                        <motion.div 
-                          animate={{ rotate: 360 }} 
-                          transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                        >
+                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
                           <Loader2 size={32} className="text-ludo-red" />
                         </motion.div>
                         <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] text-center leading-relaxed">
-                          Establishing Link<br/>
-                          <span className="text-white/20">Awaiting Server Response</span>
+                          Establishing Link<br/><span className="text-white/20">Awaiting Server Response</span>
                         </p>
                       </>
                     ) : (
                       <>
-                        <div className="w-12 h-12 bg-ludo-red/10 flex items-center justify-center border border-ludo-red/20 mb-2">
-                          <WifiOff size={24} className="text-ludo-red" />
-                        </div>
-                        <p className="text-[10px] font-black text-ludo-red uppercase tracking-[0.3em] text-center leading-relaxed">
-                          Connection Timeout<br/>
-                          <span className="text-white/40">Backend Node Offline</span>
-                        </p>
-                        <div className="flex flex-col gap-2 w-full mt-4">
-                          <SharpButton variant="primary" onClick={onSimulateRoom} className="h-10 text-[9px]">Local Simulation</SharpButton>
-                          <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} className="h-10 text-[9px]">Cancel</SharpButton>
-                        </div>
+                        <WifiOff size={24} className="text-ludo-red mb-2" />
+                        <p className="text-[10px] font-black text-ludo-red uppercase tracking-[0.3em] text-center">Connection Timeout</p>
+                        <SharpButton variant="primary" onClick={onSimulateRoom} className="w-full h-10 text-[9px] mt-4">Manual Initialization</SharpButton>
+                        <SharpButton variant="ghost" onClick={() => setView(ViewState.FRIEND_OPTIONS)} className="w-full h-10 text-[9px]">Cancel</SharpButton>
                       </>
                     )}
                  </div>
