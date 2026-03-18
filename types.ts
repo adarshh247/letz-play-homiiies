@@ -10,6 +10,32 @@ export enum ViewState {
   GAME = 'GAME',
   WALLET = 'WALLET',
   TOURNAMENT = 'TOURNAMENT',
+  CONTROL_ROOM = 'CONTROL_ROOM',
+  EVENT = 'EVENT',
+}
+
+export interface Challenge {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer?: string;
+}
+
+export interface Match {
+  id: string;
+  eventId: string;
+  teamA: string;
+  teamB: string;
+  status: 'upcoming' | 'completed' | 'settled';
+  challenges: Challenge[];
+}
+
+export interface GameEvent {
+  id: string;
+  name: string;
+  sportType: string;
+  bannerUrl: string;
+  status: 'active' | 'completed';
 }
 
 export interface UserStats {
@@ -27,6 +53,7 @@ export interface User {
   coins: number;
   level: number;
   stats: UserStats;
+  isAdmin?: boolean;
 }
 
 export interface RoomParticipant {

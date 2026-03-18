@@ -1,0 +1,452 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { X, Plus, Trash2, Save, CheckCircle, Trophy, Calendar, Target, ShieldAlert } from 'lucide-react';
+import { User, GameEvent, Match, Challenge } from '../types';
+import { SharpButton } from './ui/SharpButton';
+import { supabase } from '../lib/supabase';
+
+interface ControlRoomProps {
+  user: User;
+  onClose: () => void;
+}
+
+export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'EVENTS' | 'MATCHES' | 'REWARDS'>('EVENTS');
+  
+  // Section A State
+  const [eventName, setEventName] = useState('');
+  const [sportType, setSportType] = useState('');
+  const [bannerUrl, setBannerUrl] = useState('');
+  const [events, setEvents] = useState<GameEvent[]>([]);
+
+  // Section B State
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [teamA, setTeamA] = useState('');
+  const [teamB, setTeamB] = useState('');
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+
+  // Load mock data for now (in a real app, this would fetch from Supabase)
+  useEffect(() => {
+    // Mock data for demonstration
+    setEvents([
+      { id: '1', name: 'IPL 2026', sportType: 'Cricket', bannerUrl: 'https://picsum.photos/seed/ipl/800/400', status: 'active' }
+    ]);
+    setMatches([
+      {
+        id: 'm1',
+        eventId: '1',
+        teamA: 'Mumbai Indians',
+        teamB: 'Chennai Super Kings',
+        status: 'completed',
+        challenges: [
+          { id: 'c1', question: 'Winning Team', options: ['Mumbai Indians', 'Chennai Super Kings'] },
+          { id: 'c2', question: 'Highest Run Scorer', options: ['Rohit Sharma', 'MS Dhoni', 'Suryakumar Yadav'] }
+        ]
+      }
+    ]);
+  }, []);
+
+  // Section A: Create Event
+  const handleCreateEvent = () => {
+    if (!eventName || !sportType) return alert('Please fill required fields');
+    const newEvent: GameEvent = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: eventName,
+      sportType,
+      bannerUrl: bannerUrl || `https://picsum.photos/seed/${eventName}/800/400`,
+      status: 'active'
+    };
+    setEvents([...events, newEvent]);
+    setEventName('');
+    setSportType('');
+    setBannerUrl('');
+    alert('Event created successfully!');
+  };
+
+  // Section B: Add Match & Challenges
+  const handleAddChallenge = () => {
+    setChallenges([...challenges, { id: Math.random().toString(36).substr(2, 9), question: '', options: ['', ''] }]);
+  };
+
+  const handleUpdateChallenge = (id: string, field: 'question' | 'options', value: any) => {
+    setChallenges(challenges.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const handleUpdateOption = (challengeId: string, optionIndex: number, value: string) => {
+    setChallenges(challenges.map(c => {
+      if (c.id === challengeId) {
+        const newOptions = [...c.options];
+        newOptions[optionIndex] = value;
+        return { ...c, options: newOptions };
+      }
+      return c;
+    }));
+  };
+
+  const handleAddOption = (challengeId: string) => {
+    setChallenges(challenges.map(c => {
+      if (c.id === challengeId) {
+        return { ...c, options: [...c.options, ''] };
+      }
+      return c;
+    }));
+  };
+
+  const handleRemoveChallenge = (id: string) => {
+    setChallenges(challenges.filter(c => c.id !== id));
+  };
+
+  const handleCreateMatch = () => {
+    if (!selectedEventId || !teamA || !teamB) return alert('Please fill required fields');
+    const newMatch: Match = {
+      id: Math.random().toString(36).substr(2, 9),
+      eventId: selectedEventId,
+      teamA,
+      teamB,
+      status: 'upcoming',
+      challenges
+    };
+    setMatches([...matches, newMatch]);
+    setTeamA('');
+    setTeamB('');
+    setChallenges([]);
+    alert('Match and Challenges added successfully!');
+  };
+
+  // Section C: Rewards Settlement
+  const handleSettleMatch = (matchId: string) => {
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+    
+    // Check if all challenges have a correct answer selected
+    const allAnswered = match.challenges.every(c => c.correctAnswer);
+    if (!allAnswered) return alert('Please select correct answers for all challenges before settling.');
+
+    setMatches(matches.map(m => m.id === matchId ? { ...m, status: 'settled' } : m));
+    alert('Rewards distributed successfully!');
+  };
+
+  const handleSetCorrectAnswer = (matchId: string, challengeId: string, answer: string) => {
+    setMatches(matches.map(m => {
+      if (m.id === matchId) {
+        return {
+          ...m,
+          challenges: m.challenges.map(c => c.id === challengeId ? { ...c, correctAnswer: answer } : c)
+        };
+      }
+      return m;
+    }));
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      className="absolute inset-0 z-50 bg-ludo-dark flex flex-col"
+    >
+      {/* Header */}
+      <div className="flex-none p-4 md:p-6 flex justify-between items-center bg-black/20 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-ludo-red/20 rounded-xl flex items-center justify-center border border-ludo-red/30">
+            <ShieldAlert className="text-ludo-red" size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">Control Room</h1>
+            <p className="text-white/50 text-xs font-mono">Admin Dashboard</p>
+          </div>
+        </div>
+        <SharpButton variant="secondary" onClick={onClose} icon={<X size={16} />}>Close</SharpButton>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex p-4 gap-2 overflow-x-auto border-b border-white/5 bg-black/10">
+        <TabButton active={activeTab === 'EVENTS'} onClick={() => setActiveTab('EVENTS')} icon={<Calendar size={16} />} label="A: Event Creator" />
+        <TabButton active={activeTab === 'MATCHES'} onClick={() => setActiveTab('MATCHES')} icon={<Target size={16} />} label="B: Match & Challenges" />
+        <TabButton active={activeTab === 'REWARDS'} onClick={() => setActiveTab('REWARDS')} icon={<Trophy size={16} />} label="C: Rewards Settlement" />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="max-w-4xl mx-auto">
+          
+          {/* SECTION A: EVENT CREATOR */}
+          {activeTab === 'EVENTS' && (
+            <div className="space-y-6">
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
+                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Calendar className="text-ludo-yellow" size={20} /> Start New Season/Event
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Event Name</label>
+                    <input 
+                      type="text" 
+                      value={eventName}
+                      onChange={(e) => setEventName(e.target.value)}
+                      placeholder="e.g., IPL 2026" 
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Sport Type</label>
+                    <input 
+                      type="text" 
+                      value={sportType}
+                      onChange={(e) => setSportType(e.target.value)}
+                      placeholder="e.g., Cricket, Football" 
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Banner Image URL (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={bannerUrl}
+                      onChange={(e) => setBannerUrl(e.target.value)}
+                      placeholder="https://..." 
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
+                    />
+                  </div>
+                  <SharpButton onClick={handleCreateEvent} className="w-full mt-2" icon={<Plus size={18} />}>
+                    Create Event
+                  </SharpButton>
+                </div>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
+                <h3 className="text-sm font-bold text-white/70 uppercase mb-4">Active Events</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {events.map(event => (
+                    <div key={event.id} className="bg-black/20 border border-white/5 rounded-xl p-4 flex gap-4 items-center">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
+                        <img src={event.bannerUrl} alt={event.name} className="w-full h-full object-cover" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white">{event.name}</div>
+                        <div className="text-xs text-white/50">{event.sportType}</div>
+                        <div className="text-[10px] uppercase font-bold text-ludo-green mt-1 px-2 py-0.5 bg-ludo-green/10 rounded-full inline-block">
+                          {event.status}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {events.length === 0 && <div className="text-white/30 text-sm italic">No active events.</div>}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION B: MATCH & CHALLENGE ADDER */}
+          {activeTab === 'MATCHES' && (
+            <div className="space-y-6">
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
+                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Target className="text-ludo-blue" size={20} /> Add Match & Challenges
+                </h2>
+                
+                <div className="space-y-6">
+                  {/* Select Event */}
+                  <div>
+                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Select Event</label>
+                    <select 
+                      value={selectedEventId}
+                      onChange={(e) => setSelectedEventId(e.target.value)}
+                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors appearance-none"
+                    >
+                      <option value="">-- Select an Event --</option>
+                      {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Match Details */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-white/50 uppercase mb-1">Team A</label>
+                      <input 
+                        type="text" 
+                        value={teamA}
+                        onChange={(e) => setTeamA(e.target.value)}
+                        placeholder="e.g., India" 
+                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors"
+                      />
+                    </div>
+                    <div className="font-black text-white/30 mt-4">VS</div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-white/50 uppercase mb-1">Team B</label>
+                      <input 
+                        type="text" 
+                        value={teamB}
+                        onChange={(e) => setTeamB(e.target.value)}
+                        placeholder="e.g., Australia" 
+                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Challenges */}
+                  <div className="border-t border-white/10 pt-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-sm font-bold text-white/70 uppercase">Predictions / Challenges</h3>
+                      <button onClick={handleAddChallenge} className="text-xs font-bold text-ludo-blue bg-ludo-blue/10 px-3 py-1.5 rounded-lg hover:bg-ludo-blue/20 transition-colors flex items-center gap-1">
+                        <Plus size={14} /> Add Challenge
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {challenges.map((challenge, index) => (
+                        <div key={challenge.id} className="bg-black/30 border border-white/5 rounded-xl p-4 relative">
+                          <button onClick={() => handleRemoveChallenge(challenge.id)} className="absolute top-4 right-4 text-white/20 hover:text-ludo-red transition-colors">
+                            <Trash2 size={16} />
+                          </button>
+                          
+                          <div className="mb-3 pr-8">
+                            <label className="block text-[10px] font-bold text-white/40 uppercase mb-1">Prediction {index + 1}</label>
+                            <input 
+                              type="text" 
+                              value={challenge.question}
+                              onChange={(e) => handleUpdateChallenge(challenge.id, 'question', e.target.value)}
+                              placeholder="e.g., Who will win the toss?" 
+                              className="w-full bg-transparent border-b border-white/10 px-0 py-2 text-white outline-none focus:border-ludo-blue transition-colors text-sm"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-white/40 uppercase">Options</label>
+                            {challenge.options.map((opt, optIdx) => (
+                              <div key={optIdx} className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-full border border-white/20 flex items-center justify-center text-[8px] text-white/40">{optIdx + 1}</div>
+                                <input 
+                                  type="text" 
+                                  value={opt}
+                                  onChange={(e) => handleUpdateOption(challenge.id, optIdx, e.target.value)}
+                                  placeholder={`Option ${optIdx + 1}`} 
+                                  className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:border-white/20"
+                                />
+                              </div>
+                            ))}
+                            <button onClick={() => handleAddOption(challenge.id)} className="text-[10px] text-white/40 hover:text-white mt-1 ml-6">
+                              + Add Option
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {challenges.length === 0 && (
+                        <div className="text-center p-6 border border-dashed border-white/10 rounded-xl text-white/30 text-sm">
+                          No challenges added yet. Click "Add Challenge" to start.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <SharpButton onClick={handleCreateMatch} className="w-full" variant="primary" icon={<Save size={18} />}>
+                    Save Match & Challenges
+                  </SharpButton>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SECTION C: REWARDS SETTLEMENT */}
+          {activeTab === 'REWARDS' && (
+            <div className="space-y-6">
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
+                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <Trophy className="text-ludo-green" size={20} /> Rewards Settlement
+                </h2>
+                <p className="text-sm text-white/50 mb-6">Select correct answers for completed matches and distribute rewards to winners.</p>
+
+                <div className="space-y-4">
+                  {matches.filter(m => m.status === 'completed').map(match => {
+                    const event = events.find(e => e.id === match.eventId);
+                    return (
+                      <div key={match.id} className="bg-black/20 border border-white/10 rounded-xl overflow-hidden">
+                        <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                          <div>
+                            <div className="text-xs text-ludo-yellow font-bold uppercase">{event?.name}</div>
+                            <div className="text-lg font-black text-white">{match.teamA} vs {match.teamB}</div>
+                          </div>
+                          <div className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold text-white/70">
+                            Needs Settlement
+                          </div>
+                        </div>
+                        
+                        <div className="p-4 space-y-4">
+                          {match.challenges.map((challenge, idx) => (
+                            <div key={challenge.id} className="bg-white/5 rounded-lg p-3 border border-white/5">
+                              <div className="text-sm text-white mb-2 font-medium">Q{idx + 1}: {challenge.question}</div>
+                              <select 
+                                value={challenge.correctAnswer || ''}
+                                onChange={(e) => handleSetCorrectAnswer(match.id, challenge.id, e.target.value)}
+                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-ludo-green"
+                              >
+                                <option value="">-- Select Correct Answer --</option>
+                                {challenge.options.filter(o => o.trim() !== '').map((opt, i) => (
+                                  <option key={i} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                          
+                          <SharpButton 
+                            onClick={() => handleSettleMatch(match.id)} 
+                            className="w-full mt-2" 
+                            variant="primary"
+                            icon={<CheckCircle size={18} />}
+                          >
+                            Distribute Rewards
+                          </SharpButton>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {matches.filter(m => m.status === 'completed').length === 0 && (
+                    <div className="text-center p-8 border border-dashed border-white/10 rounded-xl text-white/40">
+                      No completed matches waiting for settlement.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Settled Matches History */}
+              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
+                <h3 className="text-sm font-bold text-white/70 uppercase mb-4">Settled Matches</h3>
+                <div className="space-y-2">
+                  {matches.filter(m => m.status === 'settled').map(match => (
+                    <div key={match.id} className="bg-black/20 border border-white/5 rounded-xl p-3 flex justify-between items-center opacity-70">
+                      <div>
+                        <div className="font-bold text-white text-sm">{match.teamA} vs {match.teamB}</div>
+                        <div className="text-xs text-white/40">{match.challenges.length} challenges settled</div>
+                      </div>
+                      <div className="text-ludo-green flex items-center gap-1 text-xs font-bold">
+                        <CheckCircle size={14} /> Settled
+                      </div>
+                    </div>
+                  ))}
+                  {matches.filter(m => m.status === 'settled').length === 0 && (
+                    <div className="text-white/30 text-sm italic">No matches settled yet.</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
+      active 
+        ? 'bg-white/10 text-white border border-white/20 shadow-lg' 
+        : 'text-white/40 hover:text-white/70 hover:bg-white/5 border border-transparent'
+    }`}
+  >
+    {icon} {label}
+  </button>
+);

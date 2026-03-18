@@ -10,6 +10,8 @@ import { GameScreen } from './components/Game/GameScreen';
 import { ProfileOverlay } from './components/ProfileOverlay';
 import { AuthPage } from './components/AuthPage';
 import { TournamentPage } from './components/TournamentPage';
+import { ControlRoom } from './components/ControlRoom';
+import { EventPage } from './components/EventPage';
 import { ViewState, User, UserStats, Room, RoomParticipant } from './types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from './lib/supabase';
@@ -101,10 +103,27 @@ const App: React.FC = () => {
   // Auth & Profile Logic
   useEffect(() => {
     const initAuth = async () => {
+      // Check for secret admin route
+      if (window.location.pathname === '/admin-homiie') {
+        const adminUser: User = {
+          id: 'admin_master',
+          name: 'System Admin',
+          avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+          coins: 999999,
+          level: 100,
+          stats: DEFAULT_STATS,
+          isAdmin: true
+        };
+        setUser(adminUser);
+        setView(ViewState.CONTROL_ROOM);
+        setLoading(false);
+        return;
+      }
+
       const { data: { session: initialSession } } = await supabase.auth.getSession();
       setSession(initialSession);
       if (initialSession) {
-        fetchProfile(initialSession.user.id);
+        fetchProfile(initialSession.user.id, initialSession.user.email);
       } else {
         setLoading(false);
       }
@@ -112,9 +131,11 @@ const App: React.FC = () => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (window.location.pathname === '/admin-homiie') return; // Ignore auth changes in admin mode
+      
       setSession(newSession);
       if (newSession) {
-        fetchProfile(newSession.user.id);
+        fetchProfile(newSession.user.id, newSession.user.email);
       } else {
         setUser(null);
         setView(ViewState.AUTH);
@@ -125,7 +146,7 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, email?: string) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (data) {
@@ -135,7 +156,8 @@ const App: React.FC = () => {
           avatarUrl: data.avatar_url,
           coins: data.coins,
           level: data.level,
-          stats: data.stats || DEFAULT_STATS
+          stats: data.stats || DEFAULT_STATS,
+          isAdmin: data.is_admin || email === 'adarsh9394@gmail.com'
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
       }
@@ -247,8 +269,14 @@ const App: React.FC = () => {
     <div className="relative w-full h-screen bg-ludo-dark text-white overflow-hidden font-sans">
       <Background />
       <AnimatePresence>
-        {user && view !== ViewState.GAME && view !== ViewState.AUTH && (
-          <TopBar user={user} onOpenWallet={() => setView(ViewState.WALLET)} onOpenSettings={() => {}} onOpenProfile={() => setIsProfileOpen(true)} />
+        {user && view !== ViewState.GAME && view !== ViewState.AUTH && view !== ViewState.CONTROL_ROOM && view !== ViewState.EVENT && (
+          <TopBar 
+            user={user} 
+            onOpenWallet={() => setView(ViewState.WALLET)} 
+            onOpenSettings={() => {}} 
+            onOpenProfile={() => setIsProfileOpen(true)} 
+            onOpenControlRoom={() => setView(ViewState.CONTROL_ROOM)}
+          />
         )}
       </AnimatePresence>
 
@@ -269,6 +297,10 @@ const App: React.FC = () => {
             <WalletPage key="wallet" user={user} onClose={() => setView(ViewState.LOBBY)} onOpenSpin={() => setIsSpinWheelOpen(true)} />
           ) : view === ViewState.TOURNAMENT && user ? (
             <TournamentPage key="tournament" user={user} onClose={() => setView(ViewState.LOBBY)} />
+          ) : view === ViewState.CONTROL_ROOM && user?.isAdmin ? (
+            <ControlRoom key="control_room" user={user} onClose={() => setView(ViewState.LOBBY)} />
+          ) : view === ViewState.EVENT && user ? (
+            <EventPage key="event" user={user} onClose={() => setView(ViewState.LOBBY)} />
           ) : (
             <Lobby 
               key="lobby" view={view} setView={handleSetView} onOpenDaily={() => setIsDailyRewardOpen(true)} 

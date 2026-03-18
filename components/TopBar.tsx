@@ -3,16 +3,17 @@ import React from 'react';
 import { User, ViewState } from '../types';
 import { motion } from 'framer-motion';
 import { HomiieCoin } from './icons/HomiieCoin';
-import { Settings, Bell } from 'lucide-react';
+import { Settings, Bell, ShieldAlert } from 'lucide-react';
 
 interface TopBarProps {
   user: User;
   onOpenWallet: () => void;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
+  onOpenControlRoom?: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettings, onOpenProfile }) => {
+export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettings, onOpenProfile, onOpenControlRoom }) => {
   return (
     <div className="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-start z-40 pointer-events-none">
       {/* Left: Premium Avatar Profile */}
@@ -55,6 +56,16 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettin
         animate={{ x: 0, opacity: 1 }}
         className="flex items-center gap-1.5 md:gap-2 pointer-events-auto"
       >
+        {user.isAdmin && onOpenControlRoom && (
+          <button 
+            onClick={onOpenControlRoom}
+            className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center text-ludo-red hover:text-white transition-all bg-ludo-red/10 border border-ludo-red/30 hover:bg-ludo-red/30 rounded-none shadow-xl"
+            title="Control Room"
+          >
+            <ShieldAlert size={14} />
+          </button>
+        )}
+
         <motion.button 
           onClick={onOpenWallet}
           whileHover={{ y: -1 }}

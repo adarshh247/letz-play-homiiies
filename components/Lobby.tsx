@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, Shield, Loader2, WifiOff } from 'lucide-react';
+import { Users, Bot, ArrowLeft, Plus, LogIn, Trophy, Play, Gift, Shield, Loader2, WifiOff, Calendar } from 'lucide-react';
 import { SharpButton } from './ui/SharpButton';
-import { ViewState, Room } from '../types';
+import { ViewState, Room, GameEvent } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface LobbyProps {
   view: ViewState;
@@ -33,6 +34,27 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [showTimeoutFallback, setShowTimeoutFallback] = useState(false);
+  const [activeEventName, setActiveEventName] = useState<string>('Events');
+
+  useEffect(() => {
+    const fetchActiveEvent = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('name')
+          .eq('is_active', true)
+          .limit(1)
+          .single();
+        
+        if (data && data.name) {
+          setActiveEventName(data.name);
+        }
+      } catch (err) {
+        // Fallback or ignore
+      }
+    };
+    fetchActiveEvent();
+  }, []);
 
   useEffect(() => {
     let timer: any;
@@ -82,6 +104,7 @@ export const Lobby: React.FC<LobbyProps> = ({
         <AnimatePresence mode="wait">
           {view === ViewState.LOBBY && (
             <motion.div key="main" variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="flex flex-col gap-3">
+              <SharpButton onClick={() => setView(ViewState.EVENT)} variant="primary" icon={<Calendar size={18} />}>{activeEventName}</SharpButton>
               <SharpButton onClick={() => setView(ViewState.FRIEND_OPTIONS)} icon={<Users size={18} />}>Multiplayer</SharpButton>
               <SharpButton onClick={() => setView(ViewState.TOURNAMENT)} variant="accent" icon={<Trophy size={18} />}>Tournaments</SharpButton>
               <SharpButton onClick={() => setView(ViewState.PLAYING_COMPUTER)} variant="outline" icon={<Bot size={18} />}>Solo vs AI</SharpButton>
