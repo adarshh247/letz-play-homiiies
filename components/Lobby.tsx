@@ -14,6 +14,7 @@ interface LobbyProps {
   onStartGame: () => void;
   userId?: string;
   socketConnected?: boolean;
+  isConnecting?: boolean;
   onSimulateRoom?: () => void;
 }
 
@@ -26,6 +27,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   onStartGame,
   userId,
   socketConnected,
+  isConnecting,
   onSimulateRoom
 }) => {
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -89,9 +91,18 @@ export const Lobby: React.FC<LobbyProps> = ({
 
           {view === ViewState.FRIEND_OPTIONS && (
             <motion.div key="friend" variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="flex flex-col gap-3">
-              <SharpButton variant="accent" icon={<Plus size={18} />} onClick={() => setView(ViewState.CREATE_ROOM)}>Create Room</SharpButton>
-              <SharpButton variant="outline" icon={<LogIn size={18} />} onClick={() => setView(ViewState.JOIN_ROOM)}>Join with Code</SharpButton>
-              <button onClick={() => setView(ViewState.LOBBY)} className="mt-4 text-white/20 uppercase font-black text-[9px] flex items-center justify-center gap-2 transition-colors hover:text-white"><ArrowLeft size={12} /> Return</button>
+              {isConnecting ? (
+                 <div className="bg-white/5 p-8 flex flex-col items-center gap-4 border border-white/10">
+                    <Loader2 size={24} className="animate-spin text-ludo-red" />
+                    <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">Connecting to Server...</p>
+                 </div>
+              ) : (
+                <>
+                  <SharpButton variant="accent" icon={<Plus size={18} />} onClick={() => setView(ViewState.CREATE_ROOM)}>Create Room</SharpButton>
+                  <SharpButton variant="outline" icon={<LogIn size={18} />} onClick={() => setView(ViewState.JOIN_ROOM)}>Join with Code</SharpButton>
+                  <button onClick={() => setView(ViewState.LOBBY)} className="mt-4 text-white/20 uppercase font-black text-[9px] flex items-center justify-center gap-2 transition-colors hover:text-white"><ArrowLeft size={12} /> Return</button>
+                </>
+              )}
             </motion.div>
           )}
 

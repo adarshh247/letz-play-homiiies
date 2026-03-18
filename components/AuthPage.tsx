@@ -9,7 +9,7 @@ interface AuthPageProps {
   onLogin: (user: any) => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = () => {
+export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -144,12 +144,18 @@ export const AuthPage: React.FC<AuthPageProps> = () => {
             </SharpButton>
           </form>
 
-          <div className="mt-6 md:mt-8 text-center border-t border-white/5 pt-4">
+          <div className="mt-6 md:mt-8 text-center border-t border-white/5 pt-4 flex flex-col gap-3">
             <button 
               onClick={() => { setIsLogin(!isLogin); setErrorMsg(''); }}
               className="text-white/20 text-[9px] hover:text-white transition-colors uppercase font-black tracking-widest underline decoration-ludo-red underline-offset-4"
             >
               {isLogin ? "Create Account" : "Return to Login"}
+            </button>
+            <button 
+              onClick={() => onLogin({})}
+              className="text-white/20 text-[9px] hover:text-white transition-colors uppercase font-black tracking-widest underline decoration-ludo-blue underline-offset-4"
+            >
+              Skip Authentication (Guest)
             </button>
           </div>
         </motion.div>

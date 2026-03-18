@@ -23,7 +23,7 @@ const DEFAULT_STATS: UserStats = {
   tournamentsWon: 0
 };
 
-// Robust socket URL detection - defaults to port 3000 on the current host
+// Robust socket URL detection
 const SOCKET_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000' 
   : `${window.location.protocol}//${window.location.hostname}:3000`;
@@ -39,18 +39,20 @@ const App: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [gameMode, setGameMode] = useState<'FRIEND' | 'COMPUTER'>('FRIEND');
   
-  // Room State
+  // Room & Socket State
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const socketRef = useRef<Socket | null>(null);
 
-  // Initialize Socket only when user is available
-  useEffect(() => {
+  // Function to initiate socket connection ONLY when needed
+  const initiateSocket = useCallback(() => {
+    if (socketRef.current?.connected) return;
     if (!user) return;
 
-    // Create socket instance but don't connect immediately
+    setIsConnecting(true);
+    
     const socket = io(SOCKET_URL, {
-      autoConnect: false,
       reconnectionAttempts: 5,
       timeout: 10000,
       transports: ['websocket', 'polling']
@@ -58,10 +60,10 @@ const App: React.FC = () => {
 
     socketRef.current = socket;
 
-    // Setup Listeners BEFORE connecting to avoid race conditions
     socket.on('connect', () => {
-      console.log('Socket Connected:', socket.id);
+      console.log('Socket Established:', socket.id);
       setSocketConnected(true);
+      setIsConnecting(false);
     });
 
     socket.on('disconnect', () => {
@@ -69,7 +71,6 @@ const App: React.FC = () => {
     });
 
     socket.on('room_updated', (room: Room) => {
-      console.log('Room Updated:', room);
       setCurrentRoom(room);
       setView(ViewState.CREATE_ROOM);
     });
@@ -79,23 +80,23 @@ const App: React.FC = () => {
     });
 
     socket.on('error', (msg: string) => {
-      alert(`Server Error: ${msg}`);
+      alert(`Multiplayer Error: ${msg}`);
+      setIsConnecting(false);
     });
 
-    socket.on('connect_error', (err) => {
-      console.warn('Socket Connection Error:', err.message);
+    socket.on('connect_error', () => {
+      console.warn('Could not connect to multiplayer server.');
       setSocketConnected(false);
+      setIsConnecting(false);
     });
+  }, [user]);
 
-    // Start connection
-    socket.connect();
-
+  // Clean up socket on unmount
+  useEffect(() => {
     return () => {
-      if (socket.connected) {
-        socket.disconnect();
-      }
+      socketRef.current?.disconnect();
     };
-  }, [user?.id]);
+  }, []);
 
   // Auth & Profile Logic
   useEffect(() => {
@@ -118,6 +119,7 @@ const App: React.FC = () => {
         setUser(null);
         setView(ViewState.AUTH);
         setLoading(false);
+        socketRef.current?.disconnect();
       }
     });
     return () => subscription.unsubscribe();
@@ -147,13 +149,12 @@ const App: React.FC = () => {
   const handleCreateRoom = () => {
     if (!user) return;
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-    
     setGameMode('FRIEND');
 
     if (socketConnected && socketRef.current) {
       socketRef.current.emit('create_room', { user, roomCode });
     } else {
-      // Offline fallback: Immediately go to lobby
+      // Fallback
       const localRoom: Room = {
         code: roomCode,
         hostId: user.id,
@@ -177,7 +178,7 @@ const App: React.FC = () => {
     if (socketConnected && socketRef.current) {
       socketRef.current.emit('join_room', { user, roomCode: cleanCode });
     } else {
-      alert("Unable to join: Multiplayer server is offline. Check your internet connection.");
+      alert("Multiplayer server offline. Please try again later.");
     }
   };
 
@@ -190,7 +191,10 @@ const App: React.FC = () => {
   };
 
   const handleSetView = (newView: ViewState) => {
-    if (newView === ViewState.PLAYING_COMPUTER) {
+    if (newView === ViewState.FRIEND_OPTIONS) {
+      initiateSocket();
+      setView(ViewState.FRIEND_OPTIONS);
+    } else if (newView === ViewState.PLAYING_COMPUTER) {
       setGameMode('COMPUTER');
       setCurrentRoom(null);
       setView(ViewState.GAME);
@@ -201,9 +205,33 @@ const App: React.FC = () => {
     }
   };
 
+  const handleGuestLogin = () => {
+    const guestUser: User = {
+      id: `guest_${Math.random().toString(36).substring(2, 9)}`,
+      name: `Guest ${Math.floor(Math.random() * 1000)}`,
+      avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`,
+      coins: 500,
+      level: 1,
+      stats: DEFAULT_STATS
+    };
+    setUser(guestUser);
+    setView(ViewState.LOBBY);
+  };
+
   const syncProfile = (updates: Partial<User>) => {
     setUser(prev => prev ? { ...prev, ...updates } : null);
-    if (user) supabase.from('profiles').update(updates).eq('id', user.id);
+    if (user && !user.id.startsWith('guest_')) {
+      supabase.from('profiles').update(updates).eq('id', user.id);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (user && !user.id.startsWith('guest_')) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setView(ViewState.AUTH);
+    setIsProfileOpen(false);
   };
 
   if (loading) {
@@ -227,7 +255,7 @@ const App: React.FC = () => {
       <main className="relative w-full h-full flex flex-col z-10">
         <AnimatePresence mode="wait">
           {view === ViewState.AUTH ? (
-            <AuthPage key="auth" onLogin={() => {}} />
+            <AuthPage key="auth" onLogin={handleGuestLogin} />
           ) : view === ViewState.GAME && user ? (
             <GameScreen 
               key="game" user={user} 
@@ -245,7 +273,7 @@ const App: React.FC = () => {
             <Lobby 
               key="lobby" view={view} setView={handleSetView} onOpenDaily={() => setIsDailyRewardOpen(true)} 
               currentRoom={currentRoom} onJoinRoom={handleJoinRoom} onStartGame={handleStartGame}
-              userId={user?.id} socketConnected={socketConnected}
+              userId={user?.id} socketConnected={socketConnected} isConnecting={isConnecting}
               onSimulateRoom={() => handleCreateRoom()}
             />
           )}
@@ -259,7 +287,7 @@ const App: React.FC = () => {
             onDeduct={(amt) => { if (user.coins >= amt) { syncProfile({ coins: user.coins - amt }); return true; } return false; }}
             userCoins={user.coins} />
           <DailyRewardOverlay isOpen={isDailyRewardOpen} onClose={() => setIsDailyRewardOpen(false)} onClaim={(amt) => syncProfile({ coins: user.coins + amt })} />
-          <ProfileOverlay isOpen={isProfileOpen} user={user} onClose={() => setIsProfileOpen(false)} onLogout={() => supabase.auth.signOut()} onUpdateUser={syncProfile} />
+          <ProfileOverlay isOpen={isProfileOpen} user={user} onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} onUpdateUser={syncProfile} />
         </>
       )}
     </div>

@@ -1,30 +1,24 @@
 
 const express = require('express');
 const http = require('http');
-const path = require('path');
 const { Server } = require('socket.io');
-//const cors = require('cors');
+const cors = require('cors');
 
 const app = express();
-//app.use(cors());
+app.use(cors());
+
+// Health check for platform monitoring
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
 const server = http.createServer(app);
-const io = new Server(server);
-/*const io = new Server(server, {
+const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
   },
   pingTimeout: 10000,
-  pingInterval: 5000
-});*/
-
-const PORT = 9000;
-app.use(express.static(path.resolve("./"))); // To get absolute path
-
-// Serve the index.html file
-app.get("/", (req, res) => {
-  res.sendFile("/index.html");
+  pingInterval: 5000,
+  transports: ['websocket', 'polling']
 });
 
 const rooms = new Map();
@@ -63,7 +57,6 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Use user ID to check if already in room, update socket ID if they reconnected
     const existingIndex = room.participants.findIndex(p => p.id === user.id);
     if (existingIndex === -1) {
         const participant = {
@@ -80,7 +73,6 @@ io.on('connection', (socket) => {
     }
     
     socket.join(roomCode);
-    // Broadcast to EVERYONE in the room including the joiner
     io.to(roomCode).emit('room_updated', room);
     console.log(`${user.name} joined room: ${roomCode}`);
   });
@@ -107,7 +99,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
     rooms.forEach((room, code) => {
       const index = room.participants.findIndex(p => p.socketId === socket.id);
       if (index !== -1) {
@@ -126,7 +117,7 @@ io.on('connection', (socket) => {
   });
 });
 
-//const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Socket.io server running on port ${PORT}`);
+  console.log(`Homiies Multi-server running on port ${PORT}`);
 });
