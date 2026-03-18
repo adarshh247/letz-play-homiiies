@@ -26,13 +26,24 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
   }, []);
 
   useEffect(() => {
+    let animationFrameId: number;
+    let lastTime = 0;
+
     if (rolling) {
       setShowImpact(false);
       rollSoundRef.current?.play().catch(() => {});
-      const interval = setInterval(() => {
-        setDisplayValue(Math.floor(Math.random() * 6) + 1);
-      }, 80);
-      return () => clearInterval(interval);
+      
+      const rollDice = (time: number) => {
+        if (time - lastTime > 80) {
+          setDisplayValue(Math.floor(Math.random() * 6) + 1);
+          lastTime = time;
+        }
+        animationFrameId = requestAnimationFrame(rollDice);
+      };
+      
+      animationFrameId = requestAnimationFrame(rollDice);
+      
+      return () => cancelAnimationFrame(animationFrameId);
     } else {
       rollSoundRef.current?.pause();
       if (rollSoundRef.current) rollSoundRef.current.currentTime = 0;
@@ -65,10 +76,11 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
       onClick={onRoll}
       disabled={disabled || rolling}
       className={clsx(
-        "relative outline-none transition-all rounded-lg md:rounded-xl",
+        "relative outline-none transition-all rounded-lg md:rounded-xl will-change-transform",
         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:scale-105 active:scale-95",
         className || "w-10 h-10 md:w-14 md:h-14"
       )}
+      style={{ transform: 'translateZ(0)' }}
     >
       <AnimatePresence>
         {showImpact && (
@@ -76,7 +88,7 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
             initial={{ scale: 0.8, opacity: 1 }}
             animate={{ scale: 1.5, opacity: 0 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-white/40 rounded-lg blur-md -z-10"
+            className="absolute inset-0 bg-white/40 rounded-lg blur-sm md:blur-md -z-10"
           />
         )}
       </AnimatePresence>
@@ -93,7 +105,8 @@ export const Dice: React.FC<DiceProps> = ({ value, rolling, onRoll, disabled, co
           scale: [1.1, 1]
         } : { rotateX: 0, rotateY: 0, scale: 1, x: 0, y: 0 }}
         transition={rolling ? { duration: 0.8, repeat: Infinity, ease: "linear" } : { duration: 0.4 }}
-        className="w-full h-full bg-white relative flex items-center justify-center rounded-lg md:rounded-xl border border-black/10 shadow-lg preserve-3d"
+        className="w-full h-full bg-white relative flex items-center justify-center rounded-lg md:rounded-xl border border-black/10 shadow-sm md:shadow-lg preserve-3d will-change-transform"
+        style={{ transform: 'translateZ(0)' }}
       >
         <div className="w-full h-full p-1.5 md:p-2 grid grid-cols-3 grid-rows-3 gap-0.5 md:gap-1">
           {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (

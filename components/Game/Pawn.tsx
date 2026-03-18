@@ -48,10 +48,11 @@ export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pul
         layout: { duration: 0.25, type: "spring", stiffness: 350, damping: 20 }
       }}
       className={clsx(
-        "relative flex items-center justify-center",
+        "relative flex items-center justify-center will-change-transform",
         size === 'small' ? "w-[80%] h-[80%] -mb-[10%] z-10" : "w-[140%] h-[140%] -mb-[30%] z-20",
-        isClickable ? "cursor-pointer z-50 drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]" : "cursor-default drop-shadow-md",
+        isClickable ? "cursor-pointer z-50 drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)] md:drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]" : "cursor-default drop-shadow-sm md:drop-shadow-md",
       )}
+      style={{ transform: 'translateZ(0)' }}
     >
       <AnimatePresence>
         {pulse && isClickable && (
@@ -59,13 +60,13 @@ export const Pawn: React.FC<PawnProps> = ({ color, id, isClickable, onClick, pul
             initial={{ opacity: 0, scale: 0.5 }}
             animate={{ opacity: 1, scale: 1.5 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-white/40 blur-xl rounded-full -z-10"
+            className="absolute inset-0 bg-white/40 blur-md md:blur-xl rounded-full -z-10"
             transition={{ repeat: Infinity, duration: 1.5, ease: "easeOut" }}
           />
         )}
       </AnimatePresence>
 
-      <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-xl overflow-visible">
+      <svg viewBox="0 0 100 120" className="w-full h-full drop-shadow-md md:drop-shadow-xl overflow-visible">
          <defs>
            <radialGradient id={`grad-head-${id}`} cx="30%" cy="30%" r="70%">
              <stop offset="0%" stopColor={theme.light} />

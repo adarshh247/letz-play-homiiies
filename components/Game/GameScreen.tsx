@@ -119,34 +119,40 @@ export const GameScreen: React.FC<GameScreenProps> = ({ user, onExit, vsComputer
     if (!socket || !roomCode || vsComputer) return;
 
     const onSyncDice = ({ value, playerIndex }: any) => {
-      console.log('Dice synced:', value, 'for player', playerIndex);
-      setDiceValue(value);
-      setIsRolling(false); 
-      setHasRolled(true);
-      
-      const currentPlayers = playersRef.current;
-      const player = currentPlayers[playerIndex];
-      if (!player) return;
+      requestAnimationFrame(() => {
+        console.log('Dice synced:', value, 'for player', playerIndex);
+        setDiceValue(value);
+        setIsRolling(false); 
+        setHasRolled(true);
+        
+        const currentPlayers = playersRef.current;
+        const player = currentPlayers[playerIndex];
+        if (!player) return;
 
-      const moves: string[] = [];
-      player.pawns.forEach(pawn => {
-        if (isValidMove(pawn.location, value)) moves.push(pawn.id);
+        const moves: string[] = [];
+        player.pawns.forEach(pawn => {
+          if (isValidMove(pawn.location, value)) moves.push(pawn.id);
+        });
+        
+        setValidMovePawns(moves);
+        if (moves.length === 0 && player.id === user.id) {
+          setTimeout(handleNextTurn, 1000);
+        }
       });
-      
-      setValidMovePawns(moves);
-      if (moves.length === 0 && player.id === user.id) {
-        setTimeout(handleNextTurn, 1000);
-      }
     };
 
     const onSyncMove = ({ pawnId, finalLocation, playerIndex }: any) => {
-      syncMoveExternally(pawnId, finalLocation, playerIndex);
+      requestAnimationFrame(() => {
+        syncMoveExternally(pawnId, finalLocation, playerIndex);
+      });
     };
 
     const onSyncTurn = (nextIdx: number) => {
-      console.log('Turn synced to:', nextIdx);
-      setTurnIndex(nextIdx);
-      resetRollingState();
+      requestAnimationFrame(() => {
+        console.log('Turn synced to:', nextIdx);
+        setTurnIndex(nextIdx);
+        resetRollingState();
+      });
     };
 
     socket.on('sync_dice', onSyncDice);
@@ -295,7 +301,7 @@ const PlayerTurnBox: React.FC<PlayerTurnBoxProps> = ({ player, active, diceValue
   const diceColors = { red: '#FF4757', green: '#2ED573', blue: '#1E90FF', yellow: '#FFA502' };
   return (
     <div className={clsx("flex items-center gap-2", diceSide === 'right' ? 'flex-row' : 'flex-row-reverse')}>
-       <div className={clsx("relative flex items-center bg-white/5 rounded-lg p-1 gap-2 w-[100px] h-[40px]", active ? "scale-105 shadow-xl opacity-100 ring-1 ring-white/20" : "grayscale opacity-30")}>
+       <div className={clsx("relative flex items-center bg-white/5 rounded-lg p-1 gap-2 w-[100px] h-[40px]", active ? "scale-105 shadow-md md:shadow-xl opacity-100 ring-1 ring-white/20" : "grayscale opacity-30")}>
           <div className="w-6 h-6 border border-white/10 rounded overflow-hidden">
              <img src={player.avatarUrl} className="w-full h-full object-cover" />
           </div>

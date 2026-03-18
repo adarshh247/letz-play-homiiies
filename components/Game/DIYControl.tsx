@@ -11,7 +11,7 @@ export const DIYControl: React.FC<DIYControlProps> = ({ onSelect }) => {
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.8, opacity: 0 }}
-      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/90 backdrop-blur-xl p-6 border-2 border-ludo-red shadow-[0_0_50px_rgba(255,71,87,0.5)] flex flex-col items-center gap-4"
+      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[70] bg-black/90 backdrop-blur-md md:backdrop-blur-xl p-6 border-2 border-ludo-red shadow-lg md:shadow-[0_0_50px_rgba(255,71,87,0.5)] flex flex-col items-center gap-4"
     >
       <div className="text-center">
         <div className="text-ludo-red font-black text-xl uppercase tracking-widest animate-pulse">DIY MODE</div>
