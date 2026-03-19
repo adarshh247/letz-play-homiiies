@@ -14,6 +14,30 @@ interface TopBarProps {
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettings, onOpenProfile, onOpenControlRoom }) => {
+  const [clickCount, setClickCount] = React.useState(0);
+  const lastClickTime = React.useRef<number>(0);
+
+  const handleSettingsClick = () => {
+    const now = Date.now();
+    let newCount = 1;
+
+    if (now - lastClickTime.current < 500) {
+      newCount = clickCount + 1;
+    }
+
+    setClickCount(newCount);
+    lastClickTime.current = now;
+
+    if (newCount >= 3) {
+      if (onOpenControlRoom) {
+        onOpenControlRoom();
+      }
+      setClickCount(0);
+    } else {
+      onOpenSettings();
+    }
+  };
+
   return (
     <div className="absolute top-0 left-0 w-full p-4 md:p-6 flex justify-between items-start z-40 pointer-events-none">
       {/* Left: Premium Avatar Profile */}
@@ -82,7 +106,7 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettin
         </motion.button>
 
         <button 
-          onClick={onOpenSettings}
+          onClick={handleSettingsClick}
           className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center text-white/30 hover:text-white transition-all bg-white/5 border border-white/10 hover:bg-white/10 rounded-none"
         >
           <Settings size={14} />

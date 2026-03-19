@@ -67,32 +67,6 @@ export const EventPage: React.FC<EventPageProps> = ({ user, onClose }) => {
     } catch (err) {
       console.error('Failed to fetch event data:', err);
     } finally {
-      // Fallback to mock data if no DB or error, for demonstration purposes
-      // Remove this in production if you strictly want DB only
-      if (!activeEvent) {
-        // Mock fallback
-        const mockEvent: GameEvent = {
-          id: '1',
-          name: 'IPL 2026',
-          sportType: 'Cricket',
-          bannerUrl: 'https://picsum.photos/seed/ipl/800/400',
-          status: 'active'
-        };
-        setActiveEvent(mockEvent);
-        setMatches([
-          {
-            id: 'm1',
-            eventId: '1',
-            teamA: 'Mumbai Indians',
-            teamB: 'Chennai Super Kings',
-            status: 'upcoming',
-            challenges: [
-              { id: 'c1', question: 'Winning Team', options: ['Mumbai Indians', 'Chennai Super Kings'] },
-              { id: 'c2', question: 'Highest Run Scorer', options: ['Rohit Sharma', 'MS Dhoni', 'Suryakumar Yadav'] }
-            ]
-          }
-        ]);
-      }
       setLoading(false);
     }
   };
@@ -101,7 +75,7 @@ export const EventPage: React.FC<EventPageProps> = ({ user, onClose }) => {
     setPredictions(prev => ({ ...prev, [challengeId]: option }));
   };
 
-  const handleSubmitPredictions = (matchId: string) => {
+  const handleSubmitPredictions = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
     
@@ -112,8 +86,22 @@ export const EventPage: React.FC<EventPageProps> = ({ user, onClose }) => {
       return;
     }
 
-    // Here you would save predictions to the database
-    alert('Predictions saved successfully!');
+    try {
+      const predictionsToSave = match.challenges.map(c => ({
+        user_id: user.id,
+        match_id: matchId,
+        challenge_id: c.id,
+        predicted_option: predictions[c.id]
+      }));
+
+      const { error } = await supabase.from('predictions').upsert(predictionsToSave, { onConflict: 'user_id, challenge_id' });
+      if (error) throw error;
+
+      alert('Predictions saved successfully!');
+    } catch (err) {
+      console.error('Error saving predictions:', err);
+      alert('Failed to save predictions. Check console for details.');
+    }
   };
 
   if (loading) {

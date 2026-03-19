@@ -26,42 +26,77 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
 
-  // Load mock data for now (in a real app, this would fetch from Supabase)
+  // Load data from Supabase
   useEffect(() => {
-    // Mock data for demonstration
-    setEvents([
-      { id: '1', name: 'IPL 2026', sportType: 'Cricket', bannerUrl: 'https://picsum.photos/seed/ipl/800/400', status: 'active' }
-    ]);
-    setMatches([
-      {
-        id: 'm1',
-        eventId: '1',
-        teamA: 'Mumbai Indians',
-        teamB: 'Chennai Super Kings',
-        status: 'completed',
-        challenges: [
-          { id: 'c1', question: 'Winning Team', options: ['Mumbai Indians', 'Chennai Super Kings'] },
-          { id: 'c2', question: 'Highest Run Scorer', options: ['Rohit Sharma', 'MS Dhoni', 'Suryakumar Yadav'] }
-        ]
+    const fetchData = async () => {
+      try {
+        const { data: eventsData } = await supabase.from('events').select('*');
+        if (eventsData) {
+          setEvents(eventsData.map(e => ({
+            id: e.id,
+            name: e.name,
+            sportType: e.sport_type,
+            bannerUrl: e.banner_url,
+            status: e.is_active ? 'active' : 'completed'
+          })));
+        }
+
+        const { data: matchesData } = await supabase.from('matches').select('*, challenges(*)');
+        if (matchesData) {
+          setMatches(matchesData.map(m => ({
+            id: m.id,
+            eventId: m.event_id,
+            teamA: m.team_a,
+            teamB: m.team_b,
+            status: m.status,
+            challenges: m.challenges ? m.challenges.map((c: any) => ({
+              id: c.id,
+              question: c.question,
+              options: c.options,
+              correctAnswer: c.correct_answer
+            })) : []
+          })));
+        }
+      } catch (err) {
+        console.error('Error fetching admin data:', err);
       }
-    ]);
+    };
+    fetchData();
   }, []);
 
   // Section A: Create Event
-  const handleCreateEvent = () => {
+  const handleCreateEvent = async () => {
     if (!eventName || !sportType) return alert('Please fill required fields');
-    const newEvent: GameEvent = {
-      id: Math.random().toString(36).substr(2, 9),
+    
+    const newEventData = {
       name: eventName,
-      sportType,
-      bannerUrl: bannerUrl || `https://picsum.photos/seed/${eventName}/800/400`,
-      status: 'active'
+      sport_type: sportType,
+      banner_url: bannerUrl || `https://picsum.photos/seed/${eventName}/800/400`,
+      is_active: true
     };
-    setEvents([...events, newEvent]);
-    setEventName('');
-    setSportType('');
-    setBannerUrl('');
-    alert('Event created successfully!');
+
+    try {
+      const { data, error } = await supabase.from('events').insert(newEventData).select().single();
+      if (error) throw error;
+      
+      if (data) {
+        const newEvent: GameEvent = {
+          id: data.id,
+          name: data.name,
+          sportType: data.sport_type,
+          bannerUrl: data.banner_url,
+          status: data.is_active ? 'active' : 'completed'
+        };
+        setEvents([...events, newEvent]);
+        setEventName('');
+        setSportType('');
+        setBannerUrl('');
+        alert('Event created successfully!');
+      }
+    } catch (err) {
+      console.error('Error creating event:', err);
+      alert('Failed to create event. Check console for details.');
+    }
   };
 
   // Section B: Add Match & Challenges
@@ -97,25 +132,66 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
     setChallenges(challenges.filter(c => c.id !== id));
   };
 
-  const handleCreateMatch = () => {
+  const handleCreateMatch = async () => {
     if (!selectedEventId || !teamA || !teamB) return alert('Please fill required fields');
-    const newMatch: Match = {
-      id: Math.random().toString(36).substr(2, 9),
-      eventId: selectedEventId,
-      teamA,
-      teamB,
-      status: 'upcoming',
-      challenges
-    };
-    setMatches([...matches, newMatch]);
-    setTeamA('');
-    setTeamB('');
-    setChallenges([]);
-    alert('Match and Challenges added successfully!');
+    
+    try {
+      const newMatchData = {
+        event_id: selectedEventId,
+        team_a: teamA,
+        team_b: teamB,
+        status: 'upcoming'
+      };
+
+      const { data: matchData, error: matchError } = await supabase.from('matches').insert(newMatchData).select().single();
+      if (matchError) throw matchError;
+
+      if (matchData) {
+        let savedChallenges: Challenge[] = [];
+        
+        if (challenges.length > 0) {
+          const challengesData = challenges.map(c => ({
+            match_id: matchData.id,
+            question: c.question,
+            options: c.options
+          }));
+          
+          const { data: insertedChallenges, error: challengesError } = await supabase.from('challenges').insert(challengesData).select();
+          if (challengesError) throw challengesError;
+          
+          if (insertedChallenges) {
+            savedChallenges = insertedChallenges.map(c => ({
+              id: c.id,
+              question: c.question,
+              options: c.options,
+              correctAnswer: c.correct_answer
+            }));
+          }
+        }
+
+        const newMatch: Match = {
+          id: matchData.id,
+          eventId: matchData.event_id,
+          teamA: matchData.team_a,
+          teamB: matchData.team_b,
+          status: matchData.status,
+          challenges: savedChallenges
+        };
+
+        setMatches([...matches, newMatch]);
+        setTeamA('');
+        setTeamB('');
+        setChallenges([]);
+        alert('Match and Challenges added successfully!');
+      }
+    } catch (err) {
+      console.error('Error creating match:', err);
+      alert('Failed to create match. Check console for details.');
+    }
   };
 
   // Section C: Rewards Settlement
-  const handleSettleMatch = (matchId: string) => {
+  const handleSettleMatch = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
     
@@ -123,20 +199,36 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
     const allAnswered = match.challenges.every(c => c.correctAnswer);
     if (!allAnswered) return alert('Please select correct answers for all challenges before settling.');
 
-    setMatches(matches.map(m => m.id === matchId ? { ...m, status: 'settled' } : m));
-    alert('Rewards distributed successfully!');
+    try {
+      const { error } = await supabase.from('matches').update({ status: 'settled' }).eq('id', matchId);
+      if (error) throw error;
+      
+      setMatches(matches.map(m => m.id === matchId ? { ...m, status: 'settled' } : m));
+      alert('Rewards distributed successfully!');
+    } catch (err) {
+      console.error('Error settling match:', err);
+      alert('Failed to settle match. Check console for details.');
+    }
   };
 
-  const handleSetCorrectAnswer = (matchId: string, challengeId: string, answer: string) => {
-    setMatches(matches.map(m => {
-      if (m.id === matchId) {
-        return {
-          ...m,
-          challenges: m.challenges.map(c => c.id === challengeId ? { ...c, correctAnswer: answer } : c)
-        };
-      }
-      return m;
-    }));
+  const handleSetCorrectAnswer = async (matchId: string, challengeId: string, answer: string) => {
+    try {
+      const { error } = await supabase.from('challenges').update({ correct_answer: answer }).eq('id', challengeId);
+      if (error) throw error;
+      
+      setMatches(matches.map(m => {
+        if (m.id === matchId) {
+          return {
+            ...m,
+            challenges: m.challenges.map(c => c.id === challengeId ? { ...c, correctAnswer: answer } : c)
+          };
+        }
+        return m;
+      }));
+    } catch (err) {
+      console.error('Error setting correct answer:', err);
+      alert('Failed to save correct answer.');
+    }
   };
 
   return (

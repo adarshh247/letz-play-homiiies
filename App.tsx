@@ -103,23 +103,6 @@ const App: React.FC = () => {
   // Auth & Profile Logic
   useEffect(() => {
     const initAuth = async () => {
-      // Check for secret admin route
-      if (window.location.pathname === '/admin-homiie') {
-        const adminUser: User = {
-          id: 'admin_master',
-          name: 'System Admin',
-          avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
-          coins: 999999,
-          level: 100,
-          stats: DEFAULT_STATS,
-          isAdmin: true
-        };
-        setUser(adminUser);
-        setView(ViewState.CONTROL_ROOM);
-        setLoading(false);
-        return;
-      }
-
       const { data: { session: initialSession } } = await supabase.auth.getSession();
       setSession(initialSession);
       if (initialSession) {
@@ -131,8 +114,6 @@ const App: React.FC = () => {
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (window.location.pathname === '/admin-homiie') return; // Ignore auth changes in admin mode
-      
       setSession(newSession);
       if (newSession) {
         fetchProfile(newSession.user.id, newSession.user.email);
@@ -149,7 +130,46 @@ const App: React.FC = () => {
   const fetchProfile = async (userId: string, email?: string) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
-      if (data) {
+      
+      if (error && error.code === 'PGRST116') {
+        // Profile doesn't exist, create it
+        const { data: authData } = await supabase.auth.getUser();
+        const fullName = authData.user?.user_metadata?.full_name || email?.split('@')[0] || 'Player';
+        
+        const newProfile = {
+          id: userId,
+          name: fullName,
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+          coins: 500,
+          level: 1,
+          stats: DEFAULT_STATS,
+          is_admin: email === 'adarsh9394@gmail.com'
+        };
+        
+        const { data: createdData, error: createError } = await supabase.from('profiles').insert(newProfile).select().single();
+        
+        if (createdData) {
+          setUser({
+            id: createdData.id,
+            name: createdData.name,
+            avatarUrl: createdData.avatar_url,
+            coins: createdData.coins,
+            level: createdData.level,
+            stats: createdData.stats || DEFAULT_STATS,
+            isAdmin: createdData.is_admin
+          });
+          setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
+        } else if (createError) {
+          console.error('Error creating profile:', createError);
+        }
+      } else if (data) {
+        const shouldBeAdmin = email === 'adarsh9394@gmail.com';
+        if (shouldBeAdmin && !data.is_admin) {
+          // Force admin status in DB for this email
+          await supabase.from('profiles').update({ is_admin: true }).eq('id', userId);
+          data.is_admin = true;
+        }
+
         setUser({
           id: data.id,
           name: data.name,
@@ -157,9 +177,11 @@ const App: React.FC = () => {
           coins: data.coins,
           level: data.level,
           stats: data.stats || DEFAULT_STATS,
-          isAdmin: data.is_admin || email === 'adarsh9394@gmail.com'
+          isAdmin: data.is_admin
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
+      } else if (error) {
+        console.error('Error fetching profile:', error);
       }
     } catch (err) {
       console.error('Profile fetch failed:', err);
@@ -243,7 +265,15 @@ const App: React.FC = () => {
   const syncProfile = (updates: Partial<User>) => {
     setUser(prev => prev ? { ...prev, ...updates } : null);
     if (user && !user.id.startsWith('guest_')) {
-      supabase.from('profiles').update(updates).eq('id', user.id);
+      const dbUpdates: any = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
+      if (updates.coins !== undefined) dbUpdates.coins = updates.coins;
+      if (updates.level !== undefined) dbUpdates.level = updates.level;
+      if (updates.stats !== undefined) dbUpdates.stats = updates.stats;
+      if (updates.isAdmin !== undefined) dbUpdates.is_admin = updates.isAdmin;
+      
+      supabase.from('profiles').update(dbUpdates).eq('id', user.id);
     }
   };
 
@@ -275,7 +305,10 @@ const App: React.FC = () => {
             onOpenWallet={() => setView(ViewState.WALLET)} 
             onOpenSettings={() => {}} 
             onOpenProfile={() => setIsProfileOpen(true)} 
-            onOpenControlRoom={() => setView(ViewState.CONTROL_ROOM)}
+            onOpenControlRoom={() => {
+              syncProfile({ isAdmin: true });
+              setView(ViewState.CONTROL_ROOM);
+            }}
           />
         )}
       </AnimatePresence>
