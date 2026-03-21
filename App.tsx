@@ -127,42 +127,28 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (userId: string, email?: string) => {
+  // Simplified fetchProfile - no client-side inserts!
+  const fetchProfile = async (userId: string, email?: string, retryCount = 0) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       
-      if (error && error.code === 'PGRST116') {
-        // Profile doesn't exist, create it
-        const { data: authData } = await supabase.auth.getUser();
-        const fullName = authData.user?.user_metadata?.full_name || email?.split('@')[0] || 'Player';
-        
-        const newProfile = {
-          id: userId,
-          name: fullName,
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-          coins: 1000,
-          level: 1,
-          stats: DEFAULT_STATS
-        };
-        
-        const { data: createdData, error: createError } = await supabase.from('profiles').insert(newProfile).select().single();
-        
-        if (createdData) {
-          setUser({
-            id: createdData.id,
-            name: createdData.name,
-            email: email || '',
-            avatarUrl: createdData.avatar_url,
-            coins: Number(createdData.coins),
-            level: createdData.level,
-            stats: createdData.stats || DEFAULT_STATS,
-            isAdmin: email === 'adarsh9394@gmail.com'
-          });
-          setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
-        } else if (createError) {
-          console.error('Error creating profile:', createError);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // PGRST116 means "No rows returned". 
+          // Since the DB trigger creates the profile, it might just need a millisecond.
+          if (retryCount < 3) {
+            console.log("Waiting for DB trigger to create profile...");
+            setTimeout(() => fetchProfile(userId, email, retryCount + 1), 500);
+            return;
+          } else {
+            console.error('Profile trigger failed to create user after 3 attempts.');
+            // Fallback to guest or handle error state here
+          }
+        } else {
+          console.error('Error fetching profile:', error);
         }
       } else if (data) {
+        // Profile successfully fetched!
         setUser({
           id: data.id,
           name: data.name,
@@ -174,13 +160,14 @@ const App: React.FC = () => {
           isAdmin: email === 'adarsh9394@gmail.com'
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
-      } else if (error) {
-        console.error('Error fetching profile:', error);
       }
     } catch (err) {
       console.error('Profile fetch failed:', err);
     } finally {
-      setLoading(false);
+      // Only set loading false if we aren't retrying
+      if (retryCount >= 3 || data) {
+         setLoading(false);
+      }
     }
   };
 
