@@ -30,16 +30,28 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, onClose, onOpenSpi
            <button onClick={onClose} className="text-white/30 hover:text-white transition-all"><X size={24} /></button>
         </div>
 
-        {/* Balance Card */}
-        <div className="bg-white/5 border border-white/10 p-6 md:p-8 mb-6 relative">
-           <div className="text-[9px] font-black text-white/30 uppercase tracking-[0.3em] mb-1">Available Assets</div>
-           <div className="flex items-baseline gap-2">
-              <span className="text-4xl md:text-5xl font-black text-white font-mono tracking-tighter leading-none">
-                {user.coins.toLocaleString()}
-              </span>
-              <span className="text-xs text-ludo-yellow font-black uppercase">HC</span>
-           </div>
-           <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-ludo-red" />
+         {/* Balance Card */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-white/5 border border-white/10 p-4 relative">
+             <div className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Homiie Coins</div>
+             <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-white font-mono tracking-tighter leading-none">
+                  {user.coins.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-ludo-yellow font-black uppercase">HC</span>
+             </div>
+             <div className="absolute top-0 right-0 w-1 h-1 bg-ludo-yellow" />
+          </div>
+          <div className="bg-white/5 border border-white/10 p-4 relative">
+             <div className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em] mb-1">Homiie Cash</div>
+             <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black text-white font-mono tracking-tighter leading-none">
+                  {user.cash.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-ludo-green font-black uppercase">H$</span>
+             </div>
+             <div className="absolute top-0 right-0 w-1 h-1 bg-ludo-green" />
+          </div>
         </div>
 
         {/* Compact Actions */}

@@ -49,8 +49,11 @@ export interface UserStats {
 export interface User {
   id: string;
   name: string;
+  email?: string;
+  phoneNo?: string;
   avatarUrl: string;
   coins: number;
+  cash: number;
   level: number;
   stats: UserStats;
   isAdmin?: boolean;

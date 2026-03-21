@@ -129,7 +129,7 @@ const App: React.FC = () => {
 
   const fetchProfile = async (userId: string, email?: string) => {
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      const { data, error } = await supabase.from('user_profiles').select('*').eq('id', userId).single();
       
       if (error && error.code === 'PGRST116') {
         // Profile doesn't exist, create it
@@ -138,24 +138,27 @@ const App: React.FC = () => {
         
         const newProfile = {
           id: userId,
-          name: fullName,
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-          coins: 500,
-          level: 1,
-          stats: DEFAULT_STATS,
+          username: fullName,
+          email: email || '',
+          password: 'supabase_auth_user', // Placeholder for NOT NULL constraint
+          homiie_coins: 1000,
+          homiie_cash: 50,
           is_admin: email === 'adarsh9394@gmail.com'
         };
         
-        const { data: createdData, error: createError } = await supabase.from('profiles').insert(newProfile).select().single();
+        const { data: createdData, error: createError } = await supabase.from('user_profiles').insert(newProfile).select().single();
         
         if (createdData) {
           setUser({
             id: createdData.id,
-            name: createdData.name,
-            avatarUrl: createdData.avatar_url,
-            coins: createdData.coins,
-            level: createdData.level,
-            stats: createdData.stats || DEFAULT_STATS,
+            name: createdData.username,
+            email: createdData.email,
+            phoneNo: createdData.phone_no,
+            avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+            coins: createdData.homiie_coins,
+            cash: createdData.homiie_cash,
+            level: 1,
+            stats: DEFAULT_STATS,
             isAdmin: createdData.is_admin
           });
           setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
@@ -166,17 +169,20 @@ const App: React.FC = () => {
         const shouldBeAdmin = email === 'adarsh9394@gmail.com';
         if (shouldBeAdmin && !data.is_admin) {
           // Force admin status in DB for this email
-          await supabase.from('profiles').update({ is_admin: true }).eq('id', userId);
+          await supabase.from('user_profiles').update({ is_admin: true }).eq('id', userId);
           data.is_admin = true;
         }
 
         setUser({
           id: data.id,
-          name: data.name,
-          avatarUrl: data.avatar_url,
-          coins: data.coins,
-          level: data.level,
-          stats: data.stats || DEFAULT_STATS,
+          name: data.username,
+          email: data.email,
+          phoneNo: data.phone_no,
+          avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+          coins: data.homiie_coins,
+          cash: data.homiie_cash,
+          level: 1,
+          stats: DEFAULT_STATS,
           isAdmin: data.is_admin
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
@@ -255,6 +261,7 @@ const App: React.FC = () => {
       name: `Guest ${Math.floor(Math.random() * 1000)}`,
       avatarUrl: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random()}`,
       coins: 500,
+      cash: 50,
       level: 1,
       stats: DEFAULT_STATS
     };
@@ -266,14 +273,12 @@ const App: React.FC = () => {
     setUser(prev => prev ? { ...prev, ...updates } : null);
     if (user && !user.id.startsWith('guest_')) {
       const dbUpdates: any = {};
-      if (updates.name !== undefined) dbUpdates.name = updates.name;
-      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
-      if (updates.coins !== undefined) dbUpdates.coins = updates.coins;
-      if (updates.level !== undefined) dbUpdates.level = updates.level;
-      if (updates.stats !== undefined) dbUpdates.stats = updates.stats;
+      if (updates.name !== undefined) dbUpdates.username = updates.name;
+      if (updates.coins !== undefined) dbUpdates.homiie_coins = updates.coins;
+      if (updates.cash !== undefined) dbUpdates.homiie_cash = updates.cash;
       if (updates.isAdmin !== undefined) dbUpdates.is_admin = updates.isAdmin;
       
-      supabase.from('profiles').update(dbUpdates).eq('id', user.id);
+      supabase.from('user_profiles').update(dbUpdates).eq('id', user.id);
     }
   };
 
@@ -303,10 +308,16 @@ const App: React.FC = () => {
           <TopBar 
             user={user} 
             onOpenWallet={() => setView(ViewState.WALLET)} 
-            onOpenSettings={() => {}} 
+            onOpenSettings={() => {
+              // Standard settings logic could go here
+              console.log("Settings clicked");
+            }} 
             onOpenProfile={() => setIsProfileOpen(true)} 
             onOpenControlRoom={() => {
-              syncProfile({ isAdmin: true });
+              // Grant admin status for this session when triggered via 3-click
+              if (!user.isAdmin) {
+                syncProfile({ isAdmin: true });
+              }
               setView(ViewState.CONTROL_ROOM);
             }}
           />
@@ -330,7 +341,7 @@ const App: React.FC = () => {
             <WalletPage key="wallet" user={user} onClose={() => setView(ViewState.LOBBY)} onOpenSpin={() => setIsSpinWheelOpen(true)} />
           ) : view === ViewState.TOURNAMENT && user ? (
             <TournamentPage key="tournament" user={user} onClose={() => setView(ViewState.LOBBY)} />
-          ) : view === ViewState.CONTROL_ROOM && user?.isAdmin ? (
+          ) : view === ViewState.CONTROL_ROOM && user ? (
             <ControlRoom key="control_room" user={user} onClose={() => setView(ViewState.LOBBY)} />
           ) : view === ViewState.EVENT && user ? (
             <EventPage key="event" user={user} onClose={() => setView(ViewState.LOBBY)} />
