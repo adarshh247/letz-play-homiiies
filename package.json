@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "start": "node --experimental-strip-types server.ts",
     "preview": "vite preview"
   },

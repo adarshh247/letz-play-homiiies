@@ -19,6 +19,7 @@ export interface Challenge {
   question: string;
   options: string[];
   correctAnswer?: string;
+  reward: number;
 }
 
 export interface Match {

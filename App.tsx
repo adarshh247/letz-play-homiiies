@@ -127,6 +127,35 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Sync user to DB whenever it changes (Debounced)
+  useEffect(() => {
+    if (!user || user.id.startsWith('guest_')) return;
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const dbUpdates = {
+          name: user.name,
+          coins: user.coins,
+          level: user.level,
+          stats: user.stats,
+          avatar_url: user.avatarUrl
+        };
+        
+        const { error } = await supabase
+          .from('profiles')
+          .update(dbUpdates)
+          .eq('id', user.id);
+        
+        if (error) throw error;
+        console.log('Profile auto-synced to DB:', user.coins);
+      } catch (err) {
+        console.error('Failed to auto-sync profile:', err);
+      }
+    }, 1500); // 1.5s debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [user?.name, user?.coins, user?.level, JSON.stringify(user?.stats), user?.avatarUrl]);
+
   // Simplified fetchProfile - no client-side inserts!
   const fetchProfile = async (userId: string, email?: string, retryCount = 0) => {
     try {
@@ -143,9 +172,11 @@ const App: React.FC = () => {
           } else {
             console.error('Profile trigger failed to create user after 3 attempts.');
             // Fallback to guest or handle error state here
+            setLoading(false);
           }
         } else {
           console.error('Error fetching profile:', error);
+          setLoading(false);
         }
       } else if (data) {
         // Profile successfully fetched!
@@ -160,14 +191,11 @@ const App: React.FC = () => {
           isAdmin: email === 'adarsh9394@gmail.com'
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
+        setLoading(false);
       }
     } catch (err) {
       console.error('Profile fetch failed:', err);
-    } finally {
-      // Only set loading false if we aren't retrying
-      if (retryCount >= 3 || data) {
-         setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -243,18 +271,11 @@ const App: React.FC = () => {
     setView(ViewState.LOBBY);
   };
 
-  const syncProfile = (updates: Partial<User>) => {
-    setUser(prev => prev ? { ...prev, ...updates } : null);
-    if (user && !user.id.startsWith('guest_')) {
-      const dbUpdates: any = {};
-      if (updates.name !== undefined) dbUpdates.name = updates.name;
-      if (updates.coins !== undefined) dbUpdates.coins = updates.coins;
-      if (updates.level !== undefined) dbUpdates.level = updates.level;
-      if (updates.stats !== undefined) dbUpdates.stats = updates.stats;
-      if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
-      
-      supabase.from('profiles').update(dbUpdates).eq('id', user.id);
-    }
+  const syncProfile = (updates: Partial<User> | ((prev: User | null) => Partial<User>)) => {
+    setUser(prev => {
+      const actualUpdates = typeof updates === 'function' ? updates(prev) : updates;
+      return prev ? { ...prev, ...actualUpdates } : null;
+    });
   };
 
   const handleLogout = async () => {
@@ -334,10 +355,16 @@ const App: React.FC = () => {
       {user && (
         <>
           <SpinWheel isOpen={isSpinWheelOpen} onClose={() => setIsSpinWheelOpen(false)} 
-            onReward={(amt) => syncProfile({ coins: user.coins + amt })}
-            onDeduct={(amt) => { if (user.coins >= amt) { syncProfile({ coins: user.coins - amt }); return true; } return false; }}
+            onReward={(amt) => syncProfile(prev => ({ coins: (prev?.coins || 0) + amt }))}
+            onDeduct={(amt) => { 
+              if (user.coins >= amt) { 
+                syncProfile(prev => ({ coins: (prev?.coins || 0) - amt })); 
+                return true; 
+              } 
+              return false; 
+            }}
             userCoins={user.coins} />
-          <DailyRewardOverlay isOpen={isDailyRewardOpen} onClose={() => setIsDailyRewardOpen(false)} onClaim={(amt) => syncProfile({ coins: user.coins + amt })} />
+          <DailyRewardOverlay isOpen={isDailyRewardOpen} onClose={() => setIsDailyRewardOpen(false)} onClaim={(amt) => syncProfile(prev => ({ coins: (prev?.coins || 0) + amt }))} />
           <ProfileOverlay isOpen={isProfileOpen} user={user} onClose={() => setIsProfileOpen(false)} onLogout={handleLogout} onUpdateUser={syncProfile} />
         </>
       )}

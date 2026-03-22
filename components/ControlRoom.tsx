@@ -53,7 +53,8 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
               id: c.id,
               question: c.question,
               options: c.options,
-              correctAnswer: c.correct_answer
+              correctAnswer: c.correct_answer,
+              reward: c.reward || 100
             })) : []
           })));
         }
@@ -104,7 +105,7 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
     setChallenges([...challenges, { id: Math.random().toString(36).substr(2, 9), question: '', options: ['', ''] }]);
   };
 
-  const handleUpdateChallenge = (id: string, field: 'question' | 'options', value: any) => {
+  const handleUpdateChallenge = (id: string, field: 'question' | 'options' | 'reward', value: any) => {
     setChallenges(challenges.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
 
@@ -153,7 +154,8 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
           const challengesData = challenges.map(c => ({
             match_id: matchData.id,
             question: c.question,
-            options: c.options
+            options: c.options,
+            reward: c.reward || 100 // Default reward if not set
           }));
           
           const { data: insertedChallenges, error: challengesError } = await supabase.from('challenges').insert(challengesData).select();
@@ -164,7 +166,8 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
               id: c.id,
               question: c.question,
               options: c.options,
-              correctAnswer: c.correct_answer
+              correctAnswer: c.correct_answer,
+              reward: c.reward
             }));
           }
         }
@@ -200,11 +203,46 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
     if (!allAnswered) return alert('Please select correct answers for all challenges before settling.');
 
     try {
+      // 1. Fetch all predictions for this match
+      const { data: predictionsData, error: predictionsError } = await supabase
+        .from('predictions')
+        .select('*')
+        .eq('match_id', matchId);
+
+      if (predictionsError) throw predictionsError;
+
+      // 2. Calculate rewards for each user
+      const userRewards: Record<string, number> = {};
+      
+      if (predictionsData && predictionsData.length > 0) {
+        predictionsData.forEach(pred => {
+          const challenge = match.challenges.find(c => c.id === pred.challenge_id);
+          if (challenge && challenge.correctAnswer === pred.predicted_option) {
+            userRewards[pred.user_id] = (userRewards[pred.user_id] || 0) + (challenge.reward || 100);
+          }
+        });
+      }
+
+      // 3. Update user profiles in DB
+      const userIds = Object.keys(userRewards);
+      if (userIds.length > 0) {
+        for (const uid of userIds) {
+          const rewardAmount = userRewards[uid];
+          // We use a RPC or a sequence of updates. 
+          // Since we don't have a custom RPC, we'll fetch and update.
+          const { data: profile } = await supabase.from('profiles').select('coins').eq('id', uid).single();
+          if (profile) {
+            await supabase.from('profiles').update({ coins: profile.coins + rewardAmount }).eq('id', uid);
+          }
+        }
+      }
+
+      // 4. Update match status
       const { error } = await supabase.from('matches').update({ status: 'settled' }).eq('id', matchId);
       if (error) throw error;
       
       setMatches(matches.map(m => m.id === matchId ? { ...m, status: 'settled' } : m));
-      alert('Rewards distributed successfully!');
+      alert(`Rewards distributed successfully! ${userIds.length} users rewarded.`);
     } catch (err) {
       console.error('Error settling match:', err);
       alert('Failed to settle match. Check console for details.');
@@ -401,6 +439,16 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
                               onChange={(e) => handleUpdateChallenge(challenge.id, 'question', e.target.value)}
                               placeholder="e.g., Who will win the toss?" 
                               className="w-full bg-transparent border-b border-white/10 px-0 py-2 text-white outline-none focus:border-ludo-blue transition-colors text-sm"
+                            />
+                          </div>
+
+                          <div className="mb-3">
+                            <label className="block text-[10px] font-bold text-white/40 uppercase mb-1">Reward Coins</label>
+                            <input 
+                              type="number" 
+                              value={challenge.reward || 100}
+                              onChange={(e) => handleUpdateChallenge(challenge.id, 'reward', parseInt(e.target.value))}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm outline-none focus:border-ludo-blue"
                             />
                           </div>
 
