@@ -104,7 +104,7 @@ export const Lobby: React.FC<LobbyProps> = ({
         <AnimatePresence mode="wait">
           {view === ViewState.LOBBY && (
             <motion.div key="main" variants={containerVariants} initial="hidden" animate="visible" exit="exit" className="flex flex-col gap-3">
-              <SharpButton onClick={() => setView(ViewState.EVENT)} variant="primary" icon={<Calendar size={18} />}>{activeEventName}</SharpButton>
+              <SharpButton onClick={() => setView(ViewState.EVENT)} variant="primary" icon={<Calendar size={18} />}>EVENTS</SharpButton>
               <SharpButton onClick={() => setView(ViewState.FRIEND_OPTIONS)} icon={<Users size={18} />}>Multiplayer</SharpButton>
               <SharpButton onClick={() => setView(ViewState.TOURNAMENT)} variant="accent" icon={<Trophy size={18} />}>Tournaments</SharpButton>
               <SharpButton onClick={() => setView(ViewState.PLAYING_COMPUTER)} variant="outline" icon={<Bot size={18} />}>Solo vs AI</SharpButton>

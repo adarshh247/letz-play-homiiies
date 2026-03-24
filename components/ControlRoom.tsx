@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Plus, Trash2, Save, CheckCircle, Trophy, Calendar, Target, ShieldAlert } from 'lucide-react';
+import { 
+  ArrowLeft, Plus, Trash2, Trophy, Calendar, 
+  Target, CheckCircle, Clock, Save, Settings, 
+  ShieldAlert, Users, Coins
+} from 'lucide-react';
 import { User, GameEvent, Match, Challenge } from '../types';
 import { SharpButton } from './ui/SharpButton';
 import { supabase } from '../lib/supabase';
@@ -11,126 +15,95 @@ interface ControlRoomProps {
 }
 
 export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'EVENTS' | 'MATCHES' | 'REWARDS'>('EVENTS');
-  
-  // Section A State
-  const [eventName, setEventName] = useState('');
-  const [sportType, setSportType] = useState('');
-  const [bannerUrl, setBannerUrl] = useState('');
+  const [activeTab, setActiveTab] = useState<'events' | 'matches' | 'rewards'>('events');
   const [events, setEvents] = useState<GameEvent[]>([]);
-
-  // Section B State
+  const [matches, setMatches] = useState<Match[]>([]);
+  
+  // Event Creator State
+  const [eventName, setEventName] = useState('');
+  const [sportType, setSportType] = useState('Cricket');
+  const [bannerUrl, setBannerUrl] = useState('https://picsum.photos/seed/cricket/1200/600');
+  
+  // Match Creator State
   const [selectedEventId, setSelectedEventId] = useState('');
   const [teamA, setTeamA] = useState('');
   const [teamB, setTeamB] = useState('');
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [matches, setMatches] = useState<Match[]>([]);
+  const [challenges, setChallenges] = useState<{id: string, question: string, options: string[], reward: number}[]>([]);
 
-  // Load data from Supabase
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: eventsData } = await supabase.from('events').select('*');
-        if (eventsData) {
-          setEvents(eventsData.map(e => ({
-            id: e.id,
-            name: e.name,
-            sportType: e.sport_type,
-            bannerUrl: e.banner_url,
-            status: e.is_active ? 'active' : 'completed'
-          })));
-        }
-
-        const { data: matchesData } = await supabase.from('matches').select('*, challenges(*)');
-        if (matchesData) {
-          setMatches(matchesData.map(m => ({
-            id: m.id,
-            eventId: m.event_id,
-            teamA: m.team_a,
-            teamB: m.team_b,
-            status: m.status,
-            challenges: m.challenges ? m.challenges.map((c: any) => ({
-              id: c.id,
-              question: c.question,
-              options: c.options,
-              correctAnswer: c.correct_answer,
-              reward: c.reward || 100
-            })) : []
-          })));
-        }
-      } catch (err) {
-        console.error('Error fetching admin data:', err);
-      }
-    };
-    fetchData();
+    fetchInitialData();
   }, []);
 
-  // Section A: Create Event
-  const handleCreateEvent = async () => {
-    if (!eventName || !sportType) return alert('Please fill required fields');
-    
-    const newEventData = {
-      name: eventName,
-      sport_type: sportType,
-      banner_url: bannerUrl || `https://picsum.photos/seed/${eventName}/800/400`,
-      is_active: true
-    };
-
+  const fetchInitialData = async () => {
     try {
-      const { data, error } = await supabase.from('events').insert(newEventData).select().single();
+      const { data: eventsData } = await supabase.from('events').select('*');
+      if (eventsData) {
+        setEvents(eventsData.map(e => ({
+          id: e.id,
+          name: e.name,
+          sportType: e.sport_type,
+          bannerUrl: e.banner_url,
+          status: e.is_active ? 'active' : 'completed'
+        })));
+      }
+
+      const { data: matchesData } = await supabase.from('matches').select('*, challenges(*)');
+      if (matchesData) {
+        setMatches(matchesData.map(m => ({
+          id: m.id,
+          eventId: m.event_id,
+          teamA: m.team_a,
+          teamB: m.team_b,
+          status: m.status,
+          challenges: m.challenges ? m.challenges.map((c: any) => ({
+            id: c.id,
+            question: c.question,
+            options: c.options,
+            correctAnswer: c.correct_answer,
+            reward: c.reward || 100
+          })) : []
+        })));
+      }
+    } catch (err) {
+      console.error('Error fetching admin data:', err);
+    }
+  };
+
+  // Section A: Event Management
+  const handleCreateEvent = async () => {
+    if (!eventName) return alert('Event name required');
+    try {
+      const { data, error } = await supabase.from('events').insert({
+        name: eventName,
+        sport_type: sportType,
+        banner_url: bannerUrl,
+        is_active: true
+      }).select().single();
+
       if (error) throw error;
-      
       if (data) {
-        const newEvent: GameEvent = {
+        setEvents([...events, {
           id: data.id,
           name: data.name,
           sportType: data.sport_type,
           bannerUrl: data.banner_url,
-          status: data.is_active ? 'active' : 'completed'
-        };
-        setEvents([...events, newEvent]);
+          status: 'active'
+        }]);
         setEventName('');
-        setSportType('');
-        setBannerUrl('');
         alert('Event created successfully!');
       }
     } catch (err) {
       console.error('Error creating event:', err);
-      alert('Failed to create event. Check console for details.');
     }
   };
 
-  // Section B: Add Match & Challenges
+  // Section B: Match & Challenges
   const handleAddChallenge = () => {
-    setChallenges([...challenges, { id: Math.random().toString(36).substr(2, 9), question: '', options: ['', ''] }]);
+    setChallenges([...challenges, { id: Math.random().toString(36).substr(2, 9), question: '', options: ['', ''], reward: 100 }]);
   };
 
   const handleUpdateChallenge = (id: string, field: 'question' | 'options' | 'reward', value: any) => {
     setChallenges(challenges.map(c => c.id === id ? { ...c, [field]: value } : c));
-  };
-
-  const handleUpdateOption = (challengeId: string, optionIndex: number, value: string) => {
-    setChallenges(challenges.map(c => {
-      if (c.id === challengeId) {
-        const newOptions = [...c.options];
-        newOptions[optionIndex] = value;
-        return { ...c, options: newOptions };
-      }
-      return c;
-    }));
-  };
-
-  const handleAddOption = (challengeId: string) => {
-    setChallenges(challenges.map(c => {
-      if (c.id === challengeId) {
-        return { ...c, options: [...c.options, ''] };
-      }
-      return c;
-    }));
-  };
-
-  const handleRemoveChallenge = (id: string) => {
-    setChallenges(challenges.filter(c => c.id !== id));
   };
 
   const handleCreateMatch = async () => {
@@ -194,6 +167,16 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
   };
 
   // Section C: Rewards Settlement
+  const handleUpdateMatchStatus = async (matchId: string, newStatus: 'upcoming' | 'completed' | 'settled') => {
+    try {
+      const { error } = await supabase.from('matches').update({ status: newStatus }).eq('id', matchId);
+      if (error) throw error;
+      setMatches(matches.map(m => m.id === matchId ? { ...m, status: newStatus } : m));
+    } catch (err) {
+      console.error('Error updating match status:', err);
+    }
+  };
+
   const handleSettleMatch = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
@@ -228,8 +211,6 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
       if (userIds.length > 0) {
         for (const uid of userIds) {
           const rewardAmount = userRewards[uid];
-          // We use a RPC or a sequence of updates. 
-          // Since we don't have a custom RPC, we'll fetch and update.
           const { data: profile } = await supabase.from('profiles').select('coins').eq('id', uid).single();
           if (profile) {
             await supabase.from('profiles').update({ coins: profile.coins + rewardAmount }).eq('id', uid);
@@ -249,186 +230,203 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
     }
   };
 
-  const handleSetCorrectAnswer = async (matchId: string, challengeId: string, answer: string) => {
+  const handleSetCorrectAnswer = async (challengeId: string, option: string) => {
     try {
-      const { error } = await supabase.from('challenges').update({ correct_answer: answer }).eq('id', challengeId);
+      const { error } = await supabase.from('challenges').update({ correct_answer: option }).eq('id', challengeId);
       if (error) throw error;
       
-      setMatches(matches.map(m => {
-        if (m.id === matchId) {
-          return {
-            ...m,
-            challenges: m.challenges.map(c => c.id === challengeId ? { ...c, correctAnswer: answer } : c)
-          };
-        }
-        return m;
-      }));
+      setMatches(matches.map(m => ({
+        ...m,
+        challenges: m.challenges.map(c => c.id === challengeId ? { ...c, correctAnswer: option } : c)
+      })));
     } catch (err) {
       console.error('Error setting correct answer:', err);
-      alert('Failed to save correct answer.');
     }
   };
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="absolute inset-0 z-50 bg-ludo-dark flex flex-col"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="absolute inset-0 z-[100] bg-ludo-dark flex flex-col"
     >
-      {/* Header */}
-      <div className="flex-none p-4 md:p-6 flex justify-between items-center bg-black/20 border-b border-white/10">
+      {/* Admin Header */}
+      <div className="flex-none p-4 md:p-6 flex justify-between items-center bg-black/40 border-b border-white/10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-ludo-red/20 rounded-xl flex items-center justify-center border border-ludo-red/30">
             <ShieldAlert className="text-ludo-red" size={20} />
           </div>
           <div>
             <h1 className="text-xl md:text-2xl font-black text-white uppercase tracking-tight">Control Room</h1>
-            <p className="text-white/50 text-xs font-mono">Admin Dashboard</p>
+            <p className="text-white/30 text-[10px] font-mono uppercase tracking-[0.3em]">System Administrator</p>
           </div>
         </div>
-        <SharpButton variant="secondary" onClick={onClose} icon={<X size={16} />}>Close</SharpButton>
+        <SharpButton variant="secondary" onClick={onClose} icon={<ArrowLeft size={16} />}>Exit Panel</SharpButton>
       </div>
 
-      {/* Tabs */}
-      <div className="flex p-4 gap-2 overflow-x-auto border-b border-white/5 bg-black/10">
-        <TabButton active={activeTab === 'EVENTS'} onClick={() => setActiveTab('EVENTS')} icon={<Calendar size={16} />} label="A: Event Creator" />
-        <TabButton active={activeTab === 'MATCHES'} onClick={() => setActiveTab('MATCHES')} icon={<Target size={16} />} label="B: Match & Challenges" />
-        <TabButton active={activeTab === 'REWARDS'} onClick={() => setActiveTab('REWARDS')} icon={<Trophy size={16} />} label="C: Rewards Settlement" />
+      {/* Admin Tabs */}
+      <div className="flex-none bg-black/20 px-4 md:px-6 border-b border-white/5 flex gap-4 md:gap-8">
+        {[
+          { id: 'events', label: 'A: Event Creator', icon: <Calendar size={14} /> },
+          { id: 'matches', label: 'B: Match & Challenges', icon: <Target size={14} /> },
+          { id: 'rewards', label: 'C: Rewards Settlement', icon: <Trophy size={14} /> }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`py-4 text-[10px] md:text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all border-b-2 ${
+              activeTab === tab.id 
+                ? 'text-ludo-red border-ludo-red' 
+                : 'text-white/30 border-transparent hover:text-white/60'
+            }`}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Content */}
+      {/* Tab Content */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <div className="max-w-4xl mx-auto">
           
-          {/* SECTION A: EVENT CREATOR */}
-          {activeTab === 'EVENTS' && (
-            <div className="space-y-6">
+          {activeTab === 'events' && (
+            <div className="space-y-8">
               <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
-                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Calendar className="text-ludo-yellow" size={20} /> Start New Season/Event
+                <h2 className="text-lg font-black text-white uppercase mb-6 flex items-center gap-2">
+                  <Plus className="text-ludo-red" /> Create New Season
                 </h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Event Name</label>
-                    <input 
-                      type="text" 
-                      value={eventName}
-                      onChange={(e) => setEventName(e.target.value)}
-                      placeholder="e.g., IPL 2026" 
-                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Event Name</label>
+                      <input 
+                        type="text" 
+                        value={eventName}
+                        onChange={(e) => setEventName(e.target.value)}
+                        placeholder="e.g., IPL 2024" 
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-ludo-red transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Sport Type</label>
+                      <select 
+                        value={sportType}
+                        onChange={(e) => setSportType(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-ludo-red"
+                      >
+                        <option value="Cricket">Cricket</option>
+                        <option value="Football">Football</option>
+                        <option value="Esports">Esports</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Sport Type</label>
-                    <input 
-                      type="text" 
-                      value={sportType}
-                      onChange={(e) => setSportType(e.target.value)}
-                      placeholder="e.g., Cricket, Football" 
-                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Banner Image URL (Optional)</label>
+                    <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Banner URL</label>
                     <input 
                       type="text" 
                       value={bannerUrl}
                       onChange={(e) => setBannerUrl(e.target.value)}
-                      placeholder="https://..." 
-                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-yellow transition-colors"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none mb-4"
                     />
+                    <div className="w-full h-24 rounded-lg overflow-hidden border border-white/10">
+                      <img src={bannerUrl} alt="Preview" className="w-full h-full object-cover opacity-50" />
+                    </div>
                   </div>
-                  <SharpButton onClick={handleCreateEvent} className="w-full mt-2" icon={<Plus size={18} />}>
-                    Create Event
-                  </SharpButton>
                 </div>
+                <SharpButton onClick={handleCreateEvent} className="w-full mt-8" variant="accent">Launch Event</SharpButton>
               </div>
 
-              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
-                <h3 className="text-sm font-bold text-white/70 uppercase mb-4">Active Events</h3>
+              <div className="space-y-4">
+                <h3 className="text-sm font-black text-white/40 uppercase tracking-widest">Active Events</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {events.map(event => (
-                    <div key={event.id} className="bg-black/20 border border-white/5 rounded-xl p-4 flex gap-4 items-center">
-                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-white/5 flex-shrink-0">
-                        <img src={event.bannerUrl} alt={event.name} className="w-full h-full object-cover" />
-                      </div>
-                      <div>
-                        <div className="font-bold text-white">{event.name}</div>
-                        <div className="text-xs text-white/50">{event.sportType}</div>
-                        <div className="text-[10px] uppercase font-bold text-ludo-green mt-1 px-2 py-0.5 bg-ludo-green/10 rounded-full inline-block">
-                          {event.status}
+                    <div key={event.id} className="bg-black/40 border border-white/10 p-4 rounded-xl flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-lg overflow-hidden">
+                          <img src={event.bannerUrl} className="w-full h-full object-cover" />
                         </div>
+                        <div>
+                          <div className="text-white font-bold uppercase text-sm">{event.name}</div>
+                          <div className="text-white/30 text-[10px] uppercase">{event.sportType}</div>
+                        </div>
+                      </div>
+                      <div className="px-2 py-1 bg-ludo-green/20 text-ludo-green text-[8px] font-black uppercase rounded border border-ludo-green/30">
+                        {event.status}
                       </div>
                     </div>
                   ))}
-                  {events.length === 0 && <div className="text-white/30 text-sm italic">No active events.</div>}
                 </div>
               </div>
             </div>
           )}
 
-          {/* SECTION B: MATCH & CHALLENGE ADDER */}
-          {activeTab === 'MATCHES' && (
-            <div className="space-y-6">
+          {activeTab === 'matches' && (
+            <div className="space-y-8">
               <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
-                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Target className="text-ludo-blue" size={20} /> Add Match & Challenges
+                <h2 className="text-lg font-black text-white uppercase mb-6 flex items-center gap-2">
+                  <Target className="text-ludo-blue" /> Add Match & Challenges
                 </h2>
                 
                 <div className="space-y-6">
-                  {/* Select Event */}
                   <div>
-                    <label className="block text-xs font-bold text-white/50 uppercase mb-1">Select Event</label>
+                    <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Select Event</label>
                     <select 
                       value={selectedEventId}
                       onChange={(e) => setSelectedEventId(e.target.value)}
-                      className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors appearance-none"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-ludo-blue"
                     >
-                      <option value="">-- Select an Event --</option>
-                      {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                      <option value="" className="bg-ludo-dark text-white">Choose an event...</option>
+                      {events.map(e => (
+                        <option key={e.id} value={e.id} className="bg-ludo-dark text-white">
+                          {e.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
-                  {/* Match Details */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="block text-xs font-bold text-white/50 uppercase mb-1">Team A</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Team A</label>
                       <input 
                         type="text" 
                         value={teamA}
                         onChange={(e) => setTeamA(e.target.value)}
-                        placeholder="e.g., India" 
-                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors"
+                        placeholder="e.g., RCB" 
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-ludo-blue"
                       />
                     </div>
-                    <div className="font-black text-white/30 mt-4">VS</div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-bold text-white/50 uppercase mb-1">Team B</label>
+                    <div>
+                      <label className="block text-[10px] font-bold text-white/40 uppercase mb-1.5">Team B</label>
                       <input 
                         type="text" 
                         value={teamB}
                         onChange={(e) => setTeamB(e.target.value)}
-                        placeholder="e.g., Australia" 
-                        className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-ludo-blue transition-colors"
+                        placeholder="e.g., CSK" 
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-ludo-blue"
                       />
                     </div>
                   </div>
 
-                  {/* Challenges */}
-                  <div className="border-t border-white/10 pt-6">
+                  <div className="pt-6 border-t border-white/5">
                     <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-sm font-bold text-white/70 uppercase">Predictions / Challenges</h3>
-                      <button onClick={handleAddChallenge} className="text-xs font-bold text-ludo-blue bg-ludo-blue/10 px-3 py-1.5 rounded-lg hover:bg-ludo-blue/20 transition-colors flex items-center gap-1">
-                        <Plus size={14} /> Add Challenge
+                      <h3 className="text-sm font-black text-white uppercase">Prediction Challenges</h3>
+                      <button 
+                        onClick={handleAddChallenge}
+                        className="text-[10px] font-black text-ludo-blue uppercase hover:underline flex items-center gap-1"
+                      >
+                        <Plus size={12} /> Add Challenge
                       </button>
                     </div>
 
                     <div className="space-y-4">
                       {challenges.map((challenge, index) => (
-                        <div key={challenge.id} className="bg-black/30 border border-white/5 rounded-xl p-4 relative">
-                          <button onClick={() => handleRemoveChallenge(challenge.id)} className="absolute top-4 right-4 text-white/20 hover:text-ludo-red transition-colors">
-                            <Trash2 size={16} />
+                        <div key={challenge.id} className="bg-black/40 border border-white/10 p-4 rounded-xl relative group">
+                          <button 
+                            onClick={() => setChallenges(challenges.filter(c => c.id !== challenge.id))}
+                            className="absolute top-4 right-4 text-white/20 hover:text-ludo-red transition-colors"
+                          >
+                            <Trash2 size={14} />
                           </button>
                           
                           <div className="mb-3 pr-8">
@@ -455,138 +453,161 @@ export const ControlRoom: React.FC<ControlRoomProps> = ({ user, onClose }) => {
                           <div className="space-y-2">
                             <label className="block text-[10px] font-bold text-white/40 uppercase">Options</label>
                             {challenge.options.map((opt, optIdx) => (
-                              <div key={optIdx} className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded-full border border-white/20 flex items-center justify-center text-[8px] text-white/40">{optIdx + 1}</div>
-                                <input 
-                                  type="text" 
-                                  value={opt}
-                                  onChange={(e) => handleUpdateOption(challenge.id, optIdx, e.target.value)}
-                                  placeholder={`Option ${optIdx + 1}`} 
-                                  className="flex-1 bg-white/5 border border-white/5 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:border-white/20"
-                                />
-                              </div>
+                              <input 
+                                key={optIdx}
+                                type="text" 
+                                value={opt}
+                                onChange={(e) => {
+                                  const newOpts = [...challenge.options];
+                                  newOpts[optIdx] = e.target.value;
+                                  handleUpdateChallenge(challenge.id, 'options', newOpts);
+                                }}
+                                placeholder={`Option ${optIdx + 1}`}
+                                className="w-full bg-white/5 border border-white/5 rounded px-3 py-1.5 text-xs text-white/70 outline-none focus:border-white/20"
+                              />
                             ))}
-                            <button onClick={() => handleAddOption(challenge.id)} className="text-[10px] text-white/40 hover:text-white mt-1 ml-6">
-                              + Add Option
-                            </button>
                           </div>
                         </div>
                       ))}
-                      {challenges.length === 0 && (
-                        <div className="text-center p-6 border border-dashed border-white/10 rounded-xl text-white/30 text-sm">
-                          No challenges added yet. Click "Add Challenge" to start.
-                        </div>
-                      )}
                     </div>
                   </div>
-
-                  <SharpButton onClick={handleCreateMatch} className="w-full" variant="primary" icon={<Save size={18} />}>
-                    Save Match & Challenges
-                  </SharpButton>
                 </div>
+                <SharpButton onClick={handleCreateMatch} className="w-full mt-8" variant="primary">Create Match</SharpButton>
               </div>
             </div>
           )}
 
-          {/* SECTION C: REWARDS SETTLEMENT */}
-          {activeTab === 'REWARDS' && (
+          {activeTab === 'rewards' && (
             <div className="space-y-6">
-              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
-                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Trophy className="text-ludo-green" size={20} /> Rewards Settlement
-                </h2>
-                <p className="text-sm text-white/50 mb-6">Select correct answers for completed matches and distribute rewards to winners.</p>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-sm font-black text-white uppercase tracking-widest">Match Settlement Queue</h2>
+                <div className="flex gap-2">
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-ludo-yellow/10 border border-ludo-yellow/20 rounded text-[8px] font-black text-ludo-yellow uppercase">
+                    <Clock size={10} /> Upcoming
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-ludo-blue/10 border border-ludo-blue/20 rounded text-[8px] font-black text-ludo-blue uppercase">
+                    <CheckCircle size={10} /> Completed
+                  </div>
+                </div>
+              </div>
 
-                <div className="space-y-4">
-                  {matches.filter(m => m.status === 'completed').map(match => {
-                    const event = events.find(e => e.id === match.eventId);
-                    return (
-                      <div key={match.id} className="bg-black/20 border border-white/10 rounded-xl overflow-hidden">
-                        <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
-                          <div>
-                            <div className="text-xs text-ludo-yellow font-bold uppercase">{event?.name}</div>
-                            <div className="text-lg font-black text-white">{match.teamA} vs {match.teamB}</div>
-                          </div>
-                          <div className="px-3 py-1 bg-white/10 rounded-lg text-xs font-bold text-white/70">
-                            Needs Settlement
+              <div className="space-y-6">
+                {matches.filter(m => m.status !== 'settled').length === 0 ? (
+                  <div className="text-center py-12 bg-white/5 border border-dashed border-white/10 rounded-2xl">
+                    <CheckCircle size={32} className="text-ludo-green mx-auto mb-3 opacity-20" />
+                    <p className="text-white/30 text-xs font-bold uppercase">All matches settled</p>
+                  </div>
+                ) : (
+                  matches.filter(m => m.status !== 'settled').map(match => (
+                    <div key={match.id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden transition-all">
+                      <div className="p-4 md:p-6 bg-black/40 border-b border-white/10 flex justify-between items-center">
+                        <div>
+                          <h3 className="text-xl font-black text-white uppercase tracking-tight">
+                            {match.teamA} <span className="text-white/20 mx-2">VS</span> {match.teamB}
+                          </h3>
+                          <p className="text-[10px] text-white/30 uppercase font-mono">Match ID: {match.id}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {match.status === 'upcoming' && (
+                            <button 
+                              onClick={() => handleUpdateMatchStatus(match.id, 'completed')}
+                              className="px-3 py-1 bg-ludo-blue/20 text-ludo-blue text-[10px] font-black uppercase rounded border border-ludo-blue/30 hover:bg-ludo-blue/40 transition-colors"
+                            >
+                              Close Predictions
+                            </button>
+                          )}
+                          <div className={`px-3 py-1 text-[10px] font-black uppercase rounded border ${
+                            match.status === 'completed' ? 'bg-ludo-blue/20 text-ludo-blue border-ludo-blue/30' :
+                            'bg-ludo-yellow/20 text-ludo-yellow border-ludo-yellow/30'
+                          }`}>
+                            {match.status}
                           </div>
                         </div>
-                        
-                        <div className="p-4 space-y-4">
-                          {match.challenges.map((challenge, idx) => (
-                            <div key={challenge.id} className="bg-white/5 rounded-lg p-3 border border-white/5">
-                              <div className="text-sm text-white mb-2 font-medium">Q{idx + 1}: {challenge.question}</div>
-                              <select 
-                                value={challenge.correctAnswer || ''}
-                                onChange={(e) => handleSetCorrectAnswer(match.id, challenge.id, e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-ludo-green"
-                              >
-                                <option value="">-- Select Correct Answer --</option>
-                                {challenge.options.filter(o => o.trim() !== '').map((opt, i) => (
-                                  <option key={i} value={opt}>{opt}</option>
-                                ))}
-                              </select>
+                      </div>
+                      
+                      <div className="p-6 space-y-8">
+                        {match.challenges.map((challenge, idx) => (
+                          <div key={challenge.id} className="space-y-4">
+                            <div className="text-sm font-bold text-white flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="w-6 h-6 bg-ludo-blue/20 text-ludo-blue rounded flex items-center justify-center text-xs">Q{idx + 1}</span>
+                                {challenge.question}
+                              </div>
                             </div>
-                          ))}
-                          
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {challenge.options.map((opt, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => handleSetCorrectAnswer(challenge.id, opt)}
+                                  className={`p-3 rounded-xl border text-left text-sm font-bold transition-all flex justify-between items-center ${
+                                    challenge.correctAnswer === opt 
+                                      ? 'bg-ludo-green/20 border-ludo-green text-ludo-green' 
+                                      : 'bg-black/20 border-white/5 text-white/40 hover:bg-white/5'
+                                  }`}
+                                >
+                                  {opt}
+                                  {challenge.correctAnswer === opt && <CheckCircle size={14} />}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        
+                        <div className="pt-6 border-t border-white/5">
                           <SharpButton 
                             onClick={() => handleSettleMatch(match.id)} 
-                            className="w-full mt-2" 
-                            variant="primary"
-                            icon={<CheckCircle size={18} />}
+                            className="w-full" 
+                            variant="accent"
                           >
-                            Distribute Rewards
+                            Settle Match & Distribute Rewards
                           </SharpButton>
                         </div>
                       </div>
-                    );
-                  })}
-
-                  {matches.filter(m => m.status === 'completed').length === 0 && (
-                    <div className="text-center p-8 border border-dashed border-white/10 rounded-xl text-white/40">
-                      No completed matches waiting for settlement.
                     </div>
-                  )}
-                </div>
+                  ))
+                )}
               </div>
 
-              {/* Settled Matches History */}
-              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl">
-                <h3 className="text-sm font-bold text-white/70 uppercase mb-4">Settled Matches</h3>
-                <div className="space-y-2">
-                  {matches.filter(m => m.status === 'settled').map(match => (
-                    <div key={match.id} className="bg-black/20 border border-white/5 rounded-xl p-3 flex justify-between items-center opacity-70">
-                      <div>
-                        <div className="font-bold text-white text-sm">{match.teamA} vs {match.teamB}</div>
-                        <div className="text-xs text-white/40">{match.challenges.length} challenges settled</div>
+              {/* Settled History Section */}
+              {matches.some(m => m.status === 'settled') && (
+                <div className="mt-12 pt-8 border-t border-white/10">
+                  <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-sm font-black text-white/40 uppercase tracking-widest flex items-center gap-2">
+                      <Trophy size={14} /> Settled History
+                    </h2>
+                  </div>
+                  <div className="space-y-4">
+                    {matches.filter(m => m.status === 'settled').map(match => (
+                      <div key={match.id} className="bg-black/20 border border-white/5 p-4 rounded-xl flex justify-between items-center opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all">
+                        <div>
+                          <div className="text-white font-bold uppercase text-sm">
+                            {match.teamA} VS {match.teamB}
+                          </div>
+                          <div className="text-white/20 text-[8px] font-mono uppercase">Settled Match • {match.id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="px-2 py-1 bg-ludo-green/10 text-ludo-green text-[8px] font-black uppercase rounded border border-ludo-green/20">
+                            Settled
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-ludo-green flex items-center gap-1 text-xs font-bold">
-                        <CheckCircle size={14} /> Settled
-                      </div>
-                    </div>
-                  ))}
-                  {matches.filter(m => m.status === 'settled').length === 0 && (
-                    <div className="text-white/30 text-sm italic">No matches settled yet.</div>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {matches.length === 0 && (
+                <div className="text-center py-20 bg-white/5 border border-dashed border-white/10 rounded-2xl">
+                  <Calendar size={48} className="text-white/10 mx-auto mb-4" />
+                  <h3 className="text-xl font-black text-white/40 uppercase">No Matches Found</h3>
+                </div>
+              )}
+
             </div>
           )}
+
         </div>
       </div>
     </motion.div>
   );
 };
-
-const TabButton = ({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => (
-  <button 
-    onClick={onClick}
-    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-      active 
-        ? 'bg-white/10 text-white border border-white/20 shadow-lg' 
-        : 'text-white/40 hover:text-white/70 hover:bg-white/5 border border-transparent'
-    }`}
-  >
-    {icon} {label}
-  </button>
-);

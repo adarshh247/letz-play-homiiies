@@ -10,7 +10,7 @@ interface TopBarProps {
   onOpenWallet: () => void;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
-  onOpenControlRoom?: () => void;
+  onOpenControlRoom: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettings, onOpenProfile, onOpenControlRoom }) => {
@@ -29,9 +29,7 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettin
     lastClickTime.current = now;
 
     if (newCount >= 3) {
-      if (onOpenControlRoom) {
-        onOpenControlRoom();
-      }
+      onOpenControlRoom();
       setClickCount(0);
     } else {
       onOpenSettings();
@@ -80,7 +78,7 @@ export const TopBar: React.FC<TopBarProps> = ({ user, onOpenWallet, onOpenSettin
         animate={{ x: 0, opacity: 1 }}
         className="flex items-center gap-1.5 md:gap-2 pointer-events-auto"
       >
-        {user.isAdmin && onOpenControlRoom && (
+        {user.isAdmin && (
           <button 
             onClick={onOpenControlRoom}
             className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center text-ludo-red hover:text-white transition-all bg-ludo-red/10 border border-ludo-red/30 hover:bg-ludo-red/30 rounded-none shadow-xl"

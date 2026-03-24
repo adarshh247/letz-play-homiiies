@@ -106,7 +106,7 @@ const App: React.FC = () => {
       const { data: { session: initialSession } } = await supabase.auth.getSession();
       setSession(initialSession);
       if (initialSession) {
-        fetchProfile(initialSession.user.id, initialSession.user.email);
+        fetchProfile(initialSession.user.id, initialSession.user.email, initialSession.user.user_metadata);
       } else {
         setLoading(false);
       }
@@ -116,7 +116,7 @@ const App: React.FC = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession) {
-        fetchProfile(newSession.user.id, newSession.user.email);
+        fetchProfile(newSession.user.id, newSession.user.email, newSession.user.user_metadata);
       } else {
         setUser(null);
         setView(ViewState.AUTH);
@@ -156,23 +156,50 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [user?.name, user?.coins, user?.level, JSON.stringify(user?.stats), user?.avatarUrl]);
 
-  // Simplified fetchProfile - no client-side inserts!
-  const fetchProfile = async (userId: string, email?: string, retryCount = 0) => {
+  // Simplified fetchProfile - with client-side fallback!
+  const fetchProfile = async (userId: string, email?: string, metadata?: any, retryCount = 0) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       
       if (error) {
         if (error.code === 'PGRST116') {
           // PGRST116 means "No rows returned". 
-          // Since the DB trigger creates the profile, it might just need a millisecond.
-          if (retryCount < 3) {
+          // If the DB trigger failed, we create it manually.
+          if (retryCount < 2) {
             console.log("Waiting for DB trigger to create profile...");
-            setTimeout(() => fetchProfile(userId, email, retryCount + 1), 500);
+            setTimeout(() => fetchProfile(userId, email, metadata, retryCount + 1), 1000);
             return;
           } else {
-            console.error('Profile trigger failed to create user after 3 attempts.');
-            // Fallback to guest or handle error state here
-            setLoading(false);
+            console.log('Profile trigger failed. Creating profile manually...');
+            const newProfile = {
+              id: userId,
+              name: metadata?.full_name || (email ? email.split('@')[0] : `User_${userId.substring(0, 5)}`),
+              coins: 1000,
+              level: 1,
+              stats: DEFAULT_STATS,
+              avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`
+            };
+            
+            const { data: createdData, error: createError } = await supabase
+              .from('profiles')
+              .insert(newProfile)
+              .select()
+              .single();
+            
+            if (createError) throw createError;
+            if (createdData) {
+              setUser({
+                id: createdData.id,
+                name: createdData.name,
+                email: email || '',
+                avatarUrl: createdData.avatar_url,
+                coins: Number(createdData.coins),
+                level: createdData.level,
+                stats: createdData.stats || DEFAULT_STATS
+              });
+              setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
+              setLoading(false);
+            }
           }
         } else {
           console.error('Error fetching profile:', error);
@@ -187,8 +214,7 @@ const App: React.FC = () => {
           avatarUrl: data.avatar_url,
           coins: Number(data.coins),
           level: data.level,
-          stats: data.stats || DEFAULT_STATS,
-          isAdmin: email === 'adarsh9394@gmail.com'
+          stats: data.stats || DEFAULT_STATS
         });
         setView(prev => prev === ViewState.AUTH ? ViewState.LOBBY : prev);
         setLoading(false);
@@ -310,10 +336,7 @@ const App: React.FC = () => {
             }} 
             onOpenProfile={() => setIsProfileOpen(true)} 
             onOpenControlRoom={() => {
-              // Grant admin status for this session when triggered via 3-click
-              //if (!user.isAdmin) {
-                syncProfile({ isAdmin: true });
-              //}
+              syncProfile({ isAdmin: true });
               setView(ViewState.CONTROL_ROOM);
             }}
           />

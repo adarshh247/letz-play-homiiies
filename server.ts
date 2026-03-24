@@ -18,16 +18,6 @@ async function startServer() {
   // Health check for platform monitoring
   app.get('/health', (req, res) => res.status(200).send('OK'));
 
-  // Simple password protection middleware
-  const isAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const password = req.query.pw; // Access via /admin-homiie?pw=YourSecretPassword123
-    if (password === process.env.ADMIN_PASSWORD) {
-      next(); // Password matches, proceed to the admin page
-    } else {
-      res.status(403).send("Unauthorized: Access Denied.");
-    }
-  };
-
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: {
@@ -142,29 +132,10 @@ async function startServer() {
       appType: "spa",
     });
     
-    // The Secret Admin Route
-    app.get('/admin-homiie', isAdmin, async (req, res, next) => {
-      try {
-        const url = req.originalUrl;
-        const templateHtml = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
-        let template = await vite.transformIndexHtml(url, templateHtml);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-      } catch (e) {
-        vite.ssrFixStacktrace(e as Error);
-        next(e);
-      }
-    });
-
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     
-    app.get('/admin-homiie', isAdmin, (req, res) => {
-      // In production, we'll send the index.html but maybe we need to inject the admin flag
-      // For simplicity, we can just send the index.html and let React check the URL
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-
     app.use(express.static(distPath));
     app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
